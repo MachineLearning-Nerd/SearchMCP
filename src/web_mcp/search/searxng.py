@@ -4,7 +4,7 @@ import httpx
 
 from web_mcp.config import settings
 from web_mcp.search.base import SearchProvider, SearchResponse, SearchResult
-from web_mcp.search.relevance import select_engines_for_query
+from web_mcp.search.relevance import clean_search_snippet, select_engines_for_query
 from web_mcp.utils.logger import get_logger
 
 
@@ -46,10 +46,11 @@ class SearxNGProvider(SearchProvider):
         return category
 
     def _parse_result(self, item: dict[str, Any]) -> SearchResult:
+        raw_description = str(item.get("content", ""))
         return SearchResult(
             title=item.get("title", ""),
             url=item.get("url", ""),
-            description=item.get("content", ""),
+            description=clean_search_snippet(raw_description),
             source=item.get("engine", ""),
         )
 

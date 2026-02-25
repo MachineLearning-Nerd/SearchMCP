@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 
 from web_mcp.config import settings
 from web_mcp.search.base import SearchProvider, SearchResponse, SearchResult
+from web_mcp.search.relevance import clean_search_snippet
 from web_mcp.utils.logger import get_logger
 
 logger = get_logger()
@@ -137,6 +138,8 @@ class GoogleProvider(SearchProvider):
                 if desc_elem:
                     description = desc_elem.get_text(strip=True)
                     break
+
+            description = clean_search_snippet(description)
 
             return SearchResult(
                 title=title,

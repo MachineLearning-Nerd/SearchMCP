@@ -2,6 +2,7 @@ from web_mcp.search.base import SearchResult
 from web_mcp.search.relevance import (
     QUERY_INTENT_GENERAL,
     QUERY_INTENT_SECURITY,
+    clean_search_snippet,
     detect_query_intent,
     is_low_quality,
     rank_search_results,
@@ -81,3 +82,20 @@ class TestRanking:
 
         outcome = rank_search_results(query=query, results=results, limit=5)
         assert is_low_quality(outcome, min_quality_score=2.5)
+
+
+class TestSnippetCleaning:
+    def test_clean_search_snippet_removes_navigation_noise(self):
+        raw = (
+            "Skip to navigation Skip to main content • English • Select Your Language • "
+            "Francais • Red Hat Enterprise Linux"
+        )
+        cleaned = clean_search_snippet(raw)
+        assert "Skip to" not in cleaned
+        assert "Select Your Language" not in cleaned
+        assert "Red Hat Enterprise Linux" in cleaned
+
+    def test_clean_search_snippet_returns_empty_for_pure_noise(self):
+        raw = "Skip to navigation • Select Your Language • English • Francais"
+        cleaned = clean_search_snippet(raw)
+        assert cleaned == ""

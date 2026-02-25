@@ -42,6 +42,18 @@ class TestSearxNGProvider:
         assert result.description == "Test content"
         assert result.source == "google"
 
+    def test_parse_result_cleans_navigation_snippet(self):
+        provider = SearxNGProvider(base_url="http://localhost:8080")
+        item = {
+            "title": "CVE page",
+            "url": "https://access.redhat.com/security/cve/cve-2026-26007",
+            "content": "Skip to navigation • Select Your Language • English • Red Hat Enterprise Linux",
+            "engine": "brave",
+        }
+        result = provider._parse_result(item)
+        assert "Skip to" not in result.description
+        assert "Red Hat Enterprise Linux" in result.description
+
     def test_parse_response(self):
         provider = SearxNGProvider(base_url="http://localhost:8080")
         data = {

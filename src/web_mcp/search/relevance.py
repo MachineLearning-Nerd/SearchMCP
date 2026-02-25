@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -60,6 +61,30 @@ _GENERAL_DOMAIN_BOOSTS: dict[str, float] = {
     "developer.mozilla.org": 3.0,
     "github.com": 2.5,
     "en.wikipedia.org": 2.0,
+}
+
+_NAVIGATION_PHRASES = (
+    "skip to navigation",
+    "skip to main content",
+    "skip to content",
+    "select your language",
+    "choose your language",
+    "infrastructure and management",
+    "official websites use .gov",
+)
+_LANGUAGE_TOKENS = {
+    "english",
+    "francais",
+    "espanol",
+    "deutsch",
+    "italiano",
+    "portuguese",
+    "japanese",
+    "korean",
+    "chinese",
+    "russian",
+    "arabic",
+    "hindi",
 }
 
 
@@ -173,6 +198,39 @@ def is_low_quality(outcome: RankingOutcome, min_quality_score: float) -> bool:
     return outcome.quality_score < min_quality_score
 
 
+def clean_search_snippet(snippet: str) -> str:
+    cleaned = snippet.replace("\xa0", " ")
+    cleaned = " ".join(cleaned.split())
+    if not cleaned:
+        return ""
+
+    lowered = cleaned.lower()
+    if any(phrase in lowered for phrase in _NAVIGATION_PHRASES):
+        segments = re.split(r"\s*[•|·]\s*", cleaned)
+        filtered_segments = [
+            segment for segment in segments if not _is_low_information_segment(segment)
+        ]
+        if filtered_segments:
+            cleaned = " • ".join(filtered_segments)
+        else:
+            cleaned = ""
+
+    if not cleaned:
+        return ""
+
+    for phrase in _NAVIGATION_PHRASES:
+        cleaned = re.sub(re.escape(phrase), "", cleaned, flags=re.IGNORECASE)
+
+    cleaned = re.sub(r"\s+[•|·]\s+", " • ", cleaned)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    cleaned = cleaned.strip(" •|-")
+
+    if _is_low_information_segment(cleaned):
+        return ""
+
+    return cleaned
+
+
 def _score_result(
     result: SearchResult,
     query_tokens: set[str],
@@ -265,3 +323,31 @@ def _is_low_signal_result(result: SearchResult) -> bool:
 def _get_domain(url: str) -> str:
     parsed = urlparse(url)
     return parsed.netloc.lower()
+
+
+def _is_low_information_segment(segment: str) -> bool:
+    lowered = segment.lower().strip()
+    if not lowered:
+        return True
+
+    if any(phrase in lowered for phrase in _NAVIGATION_PHRASES):
+        return True
+
+    words = [_normalize_token(word) for word in re.findall(r"[^\W\d_]+", lowered, flags=re.UNICODE)]
+    words = [word for word in words if word]
+    if not words:
+        return True
+
+    if len(words) <= 3 and all(word in _LANGUAGE_TOKENS for word in words):
+        return True
+
+    nav_tokens = {"skip", "to", "main", "content", "navigation", "select", "your", "language"}
+    if len(words) <= 5 and all(word in nav_tokens for word in words):
+        return True
+
+    return False
+
+
+def _normalize_token(token: str) -> str:
+    normalized = unicodedata.normalize("NFKD", token)
+    return normalized.encode("ascii", "ignore").decode("ascii").lower()
