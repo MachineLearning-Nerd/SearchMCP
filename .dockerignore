@@ -48,10 +48,24 @@ dmypy.json
 # Linting
 .ruff_cache/
 
+# Documentation
+docs/_build/
+site/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile*
+docker-compose*
+.docker/
+
 # Environment files
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Logs
 *.log
@@ -61,8 +75,21 @@ logs/
 .DS_Store
 Thumbs.db
 
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Development files
+Makefile
+*.md
+!README.md
+.agents.md
+CLAUDE.md
+PRINCIPLES.md
+RULES.md
+
 # Misc
 *.bak
 *.tmp
 *.temp
-.cache/

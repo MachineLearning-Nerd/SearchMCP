@@ -11,7 +11,8 @@ class SearxNGProvider(SearchProvider):
     VALID_CATEGORIES: set[str] = {"general", "images", "videos", "news", "science", "files"}
 
     def __init__(self, base_url: str | None = None, timeout: int | None = None):
-        self._base_url = (base_url or settings.SEARXNG_URL).rstrip("/")
+        resolved_base_url = settings.SEARXNG_URL if base_url is None else base_url
+        self._base_url = resolved_base_url.rstrip("/")
         self._timeout = timeout or settings.SEARXNG_TIMEOUT
         self._logger = get_logger("web_mcp")
         self._client: httpx.AsyncClient | None = None
@@ -180,6 +181,18 @@ class SearxNGProvider(SearchProvider):
                 query=query,
             )
 
+        except Exception as e:
+            self._logger.error(
+                f"Unexpected SearxNG error: {e}",
+                extra={"url": url, "error": str(e)},
+            )
+            return SearchResponse(
+                results=[],
+                suggestions=[],
+                provider=self.name,
+                query=query,
+            )
+
     async def get_suggestions(self, query: str) -> list[str]:
         params: dict[str, Any] = {
             "format": "json",
@@ -250,5 +263,12 @@ class SearxNGProvider(SearchProvider):
             self._logger.error(
                 f"Failed to parse SearxNG suggestions: {e}",
                 extra={"error": str(e)},
+            )
+            return []
+
+        except Exception as e:
+            self._logger.error(
+                f"Unexpected SearxNG suggestions error: {e}",
+                extra={"url": url, "error": str(e)},
             )
             return []

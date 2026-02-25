@@ -1,7 +1,8 @@
-import pytest
 from unittest.mock import AsyncMock, patch
 
-from web_mcp.tools.fetch_content import FetchContentResult, fetch_content, TOOL_SCHEMA
+import pytest
+
+from web_mcp.tools.fetch_content import TOOL_SCHEMA, FetchContentResult, fetch_content
 
 
 class TestFetchContentResult:
@@ -80,8 +81,8 @@ class TestFetchContent:
             truncated=False,
         )
 
-        with patch("web_mcp.tools.fetch_content.ContentExtractor") as MockExtractor:
-            instance = MockExtractor.return_value
+        with patch("web_mcp.tools.fetch_content.ContentExtractor") as mock_extractor:
+            instance = mock_extractor.return_value
             instance.extract = AsyncMock(return_value=mock_extracted)
 
             result = await fetch_content("https://example.com")
@@ -99,8 +100,8 @@ class TestFetchContent:
             error="Failed to extract",
         )
 
-        with patch("web_mcp.tools.fetch_content.ContentExtractor") as MockExtractor:
-            instance = MockExtractor.return_value
+        with patch("web_mcp.tools.fetch_content.ContentExtractor") as mock_extractor:
+            instance = mock_extractor.return_value
             instance.extract = AsyncMock(return_value=mock_extracted)
 
             result = await fetch_content("https://example.com")

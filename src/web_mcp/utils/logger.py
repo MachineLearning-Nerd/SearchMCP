@@ -1,8 +1,8 @@
-import logging
 import json
+import logging
 import sys
 from collections.abc import MutableMapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from logging import LogRecord
 from typing import Any
 
@@ -16,7 +16,7 @@ class StructuredFormatter(logging.Formatter):
 
     def format(self, record: LogRecord) -> str:
         log_data: dict[str, Any] = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "level": record.levelname,
             "module": record.module,
             "message": record.getMessage(),
@@ -109,7 +109,7 @@ def get_logger(name: str = "web_mcp") -> logging.Logger:
     return logging.getLogger(name)
 
 
-class LoggerAdapter(logging.LoggerAdapter):
+class LoggerAdapter(logging.LoggerAdapter[logging.Logger]):
     """Adapter that adds extra context to log records."""
 
     def process(

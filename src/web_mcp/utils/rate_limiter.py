@@ -1,7 +1,6 @@
 import asyncio
 import time
 from collections import deque
-from typing import Deque
 
 from web_mcp.config import settings
 
@@ -14,7 +13,7 @@ class RateLimiter:
         self._period_seconds = (
             period_seconds if period_seconds is not None else settings.RATE_LIMIT_PERIOD
         )
-        self._timestamps: Deque[float] = deque()
+        self._timestamps: deque[float] = deque()
         self._lock = asyncio.Lock()
 
     async def acquire(self) -> None:

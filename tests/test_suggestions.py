@@ -1,10 +1,11 @@
-import pytest
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from web_mcp.tools.suggestions import (
+    TOOL_SCHEMA,
     SuggestionsResult,
     get_suggestions,
-    TOOL_SCHEMA,
 )
 
 

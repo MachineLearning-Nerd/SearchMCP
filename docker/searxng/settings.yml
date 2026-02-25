@@ -1,0 +1,118 @@
+# SearxNG Settings for Web MCP Server
+# This configuration enables JSON API access for the MCP server
+
+use_default_settings: true
+
+general:
+  instance_name: "Web MCP Search"
+  debug: false
+  enable_metrics: false
+
+search:
+  safe_search: 0
+  autocomplete: "google"
+  default_lang: "en"
+  formats:
+    - html
+    - json
+
+server:
+  port: 8080
+  bind_address: "127.0.0.1"
+  secret_key: "change_me_to_a_random_string_in_production"
+  limiter: false
+  image_proxy: false
+  http_protocol_version: "1.1"
+
+outgoing:
+  request_timeout: 10.0
+  max_request_timeout: 15.0
+  pool_connections: 100
+  pool_maxsize: 20
+
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    disabled: false
+
+  - name: bing
+    engine: bing
+    shortcut: b
+    disabled: false
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    disabled: false
+
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    disabled: false
+
+  - name: github
+    engine: github
+    shortcut: gh
+    disabled: false
+
+  - name: youtube
+    engine: youtube_noapi
+    shortcut: yt
+    disabled: false
+
+  - name: stackoverflow
+    engine: stackoverflow
+    shortcut: st
+    disabled: false
+
+  - name: reddit
+    engine: reddit
+    shortcut: re
+    disabled: false
+
+  - name: arxiv
+    engine: arxiv
+    shortcut: arx
+    categories: science
+    disabled: false
+
+  - name: pubmed
+    engine: pubmed
+    shortcut: pub
+    categories: science
+    disabled: false
+
+  - name: flickr
+    engine: flickr
+    shortcut: fl
+    categories: images
+    disabled: false
+
+  - name: deviantart
+    engine: deviantart
+    shortcut: da
+    categories: images
+    disabled: false
+
+ui:
+  static_use_hash: true
+  default_locale: "en"
+  query_in_title: false
+  infinite_scroll: false
+  center_alignment: true
+  default_theme: simple
+  theme_args:
+    simple_style: auto
+
+preferences:
+  lock: []
+
+enabled_plugins:
+  - 'Hash plugin'
+  - 'Search on category select'
+  - 'Self Information'
+  - 'Tracker URL remover'
+
+disabled_plugins:
+  - 'Hostname replace'

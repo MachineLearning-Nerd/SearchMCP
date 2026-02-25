@@ -1,8 +1,9 @@
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from web_mcp.search.google import GoogleProvider, USER_AGENTS
+import pytest
+
 from web_mcp.search.base import SearchResponse
+from web_mcp.search.google import USER_AGENTS, GoogleProvider
 
 
 class TestGoogleProvider:

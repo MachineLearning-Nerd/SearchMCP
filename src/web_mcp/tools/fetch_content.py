@@ -35,7 +35,7 @@ class FetchContentResult:
             "error": self.error,
         }
 
-    def to_mcp_response(self) -> list[dict]:
+    def to_mcp_response(self) -> list[dict[str, str]]:
         """Convert to MCP tool response format."""
         if self.error:
             return [
@@ -100,7 +100,7 @@ async def fetch_content(url: str, max_length: int | None = None) -> FetchContent
             )
 
         logger.info(
-            f"Content extracted successfully",
+            "Content extracted successfully",
             extra={
                 "url": url,
                 "title": extracted.title,

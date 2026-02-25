@@ -1,17 +1,23 @@
 from web_mcp.tools.fetch_content import (
-    FetchContentResult,
-    fetch_content,
     TOOL_SCHEMA as FETCH_CONTENT_SCHEMA,
 )
-from web_mcp.tools.web_search import (
-    WebSearchResult,
-    web_search,
-    TOOL_SCHEMA as WEB_SEARCH_SCHEMA,
+from web_mcp.tools.fetch_content import (
+    FetchContentResult,
+    fetch_content,
+)
+from web_mcp.tools.suggestions import (
+    TOOL_SCHEMA as GET_SUGGESTIONS_SCHEMA,
 )
 from web_mcp.tools.suggestions import (
     SuggestionsResult,
     get_suggestions,
-    TOOL_SCHEMA as GET_SUGGESTIONS_SCHEMA,
+)
+from web_mcp.tools.web_search import (
+    TOOL_SCHEMA as WEB_SEARCH_SCHEMA,
+)
+from web_mcp.tools.web_search import (
+    WebSearchResult,
+    web_search,
 )
 
 __all__ = [

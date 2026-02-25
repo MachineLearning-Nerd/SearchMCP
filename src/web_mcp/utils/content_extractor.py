@@ -1,8 +1,9 @@
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import urlparse
+
 import httpx
 import trafilatura
-from typing import Any
 
 from web_mcp.utils.logger import get_logger
 
@@ -160,9 +161,9 @@ class ContentExtractor:
             metadata = trafilatura.extract_metadata(html, default_url=url)
 
             meta: dict[str, str] = {
-                "title": metadata.title if metadata else "",
-                "description": metadata.description if metadata else "",
-                "author": metadata.author if metadata else "",
+                "title": metadata.title if metadata and metadata.title else "",
+                "description": metadata.description if metadata and metadata.description else "",
+                "author": metadata.author if metadata and metadata.author else "",
             }
 
             return content or "", meta

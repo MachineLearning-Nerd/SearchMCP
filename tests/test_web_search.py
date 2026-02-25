@@ -1,12 +1,13 @@
-import pytest
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
+from web_mcp.search.base import SearchResponse, SearchResult
 from web_mcp.tools.web_search import (
+    TOOL_SCHEMA,
     WebSearchResult,
     web_search,
-    TOOL_SCHEMA,
 )
-from web_mcp.search.base import SearchResponse, SearchResult
 
 
 class TestWebSearchResult:

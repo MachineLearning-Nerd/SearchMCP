@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from web_mcp.config import settings
-from web_mcp.search.fallback import FallbackSearchProvider
 from web_mcp.search.base import SearchResponse
+from web_mcp.search.fallback import FallbackSearchProvider
 from web_mcp.utils.logger import get_logger
 
 logger = get_logger("web_mcp")
@@ -30,7 +30,7 @@ class WebSearchResult:
             "error": self.error,
         }
 
-    def to_mcp_response(self) -> list[dict]:
+    def to_mcp_response(self) -> list[dict[str, str]]:
         """Convert to MCP tool response format."""
         if not self.results:
             return [
@@ -98,7 +98,7 @@ async def web_search(
         limit = settings.DEFAULT_SEARCH_LIMIT
 
     logger.info(
-        f"Performing web search",
+        "Performing web search",
         extra={"query": query, "category": category, "limit": limit},
     )
 
@@ -109,7 +109,7 @@ async def web_search(
         results = [r.to_dict() for r in response.results]
 
         logger.info(
-            f"Search completed",
+            "Search completed",
             extra={
                 "query": query,
                 "provider": response.provider,

@@ -1,6 +1,5 @@
-import pytest
 
-from web_mcp.search.base import SearchResult, SearchResponse
+from web_mcp.search.base import SearchResponse, SearchResult
 
 
 class TestSearchResult:

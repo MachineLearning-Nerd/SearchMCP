@@ -1,6 +1,6 @@
 from web_mcp.config import settings
 from web_mcp.search.base import SearchProvider, SearchResponse
-from web_mcp.search.google import GoogleProvider, GOOGLE_TIMEOUT
+from web_mcp.search.google import GOOGLE_TIMEOUT, GoogleProvider
 from web_mcp.search.searxng import SearxNGProvider
 from web_mcp.utils.logger import get_logger
 from web_mcp.utils.rate_limiter import RateLimiter
@@ -52,13 +52,13 @@ class FallbackSearchProvider(SearchProvider):
 
         if not self._fallback_enabled:
             self._logger.info(
-                f"SearxNG returned no results, fallback disabled",
+                "SearxNG returned no results, fallback disabled",
                 extra={"query": query},
             )
             return response
 
         self._logger.info(
-            f"SearxNG returned no results, falling back to Google",
+            "SearxNG returned no results, falling back to Google",
             extra={"query": query, "provider": "google"},
         )
 

@@ -5,7 +5,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from web_mcp.config import settings
-from web_mcp.search.base import SearchProvider, SearchResult, SearchResponse
+from web_mcp.search.base import SearchProvider, SearchResponse, SearchResult
 from web_mcp.utils.logger import get_logger
 
 logger = get_logger()

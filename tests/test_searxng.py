@@ -1,8 +1,8 @@
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from web_mcp.search.searxng import SearxNGProvider
-from web_mcp.search.base import SearchResponse
 
 
 class TestSearxNGProvider:
