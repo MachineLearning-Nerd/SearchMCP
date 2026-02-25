@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -57,6 +57,11 @@ class TestSearxNGProvider:
         assert response.query == "test query"
         assert response.provider == "searxng"
 
+    def test_resolve_candidate_limit(self):
+        provider = SearxNGProvider(base_url="http://localhost:8080")
+        candidate_limit = provider._resolve_candidate_limit(5)
+        assert candidate_limit >= 5
+
     @pytest.mark.asyncio
     async def test_search_connection_error(self):
         provider = SearxNGProvider(base_url="http://nonexistent:8080")
@@ -65,6 +70,25 @@ class TestSearxNGProvider:
             response = await provider.search("test query")
             assert response.results == []
             assert response.provider == "searxng"
+
+    @pytest.mark.asyncio
+    async def test_search_applies_engine_profile_for_security_query(self):
+        provider = SearxNGProvider(base_url="http://localhost:8080")
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"results": [], "suggestions": []}
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+
+        with patch.object(provider, "_get_client", return_value=mock_client):
+            await provider.search("CVE-2026-26007 details", limit=5)
+
+        _, kwargs = mock_client.get.call_args
+        params = kwargs["params"]
+        assert "engines" in params
+        assert "brave" in params["engines"]
 
     @pytest.mark.asyncio
     async def test_get_suggestions_error(self):

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 from web_mcp.config import settings
 from web_mcp.search.base import SearchResponse
@@ -32,6 +33,14 @@ class WebSearchResult:
 
     def to_mcp_response(self) -> list[dict[str, str]]:
         """Convert to MCP tool response format."""
+        if self.error:
+            return [
+                {
+                    "type": "text",
+                    "text": f"Search failed for query '{self.query}': {self.error}",
+                }
+            ]
+
         if not self.results:
             return [
                 {
@@ -45,12 +54,17 @@ class WebSearchResult:
         lines.append("---\n")
 
         for i, result in enumerate(self.results, 1):
-            title = result.get("title", "Untitled")
-            url = result.get("url", "")
-            description = result.get("description", "")
+            title = _compact_text(str(result.get("title", "Untitled")), max_length=160)
+            url = str(result.get("url", ""))
+            description = _compact_text(str(result.get("description", "")), max_length=320)
+            source = str(result.get("source", "")).strip()
+            domain = _extract_domain(url)
 
             lines.append(f"## {i}. {title}\n")
             lines.append(f"**URL:** {url}\n")
+            if source or domain:
+                source_parts = [part for part in [source, domain] if part]
+                lines.append(f"**Source:** {' | '.join(source_parts)}\n")
             if description:
                 lines.append(f"\n{description}\n")
             lines.append("\n")
@@ -68,6 +82,18 @@ class WebSearchResult:
                 "text": "\n".join(lines),
             }
         ]
+
+
+def _compact_text(value: str, max_length: int) -> str:
+    compact = " ".join(value.split())
+    if len(compact) <= max_length:
+        return compact
+    return f"{compact[: max_length - 3]}..."
+
+
+def _extract_domain(url: str) -> str:
+    parsed = urlparse(url)
+    return parsed.netloc
 
 
 _search_provider: FallbackSearchProvider | None = None

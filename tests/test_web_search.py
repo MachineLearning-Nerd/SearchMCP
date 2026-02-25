@@ -56,7 +56,12 @@ class TestWebSearchResult:
         result = WebSearchResult(
             query="test query",
             results=[
-                {"title": "Test Title", "url": "https://example.com", "description": "Test desc"}
+                {
+                    "title": "Test Title",
+                    "url": "https://example.com",
+                    "description": "Test desc",
+                    "source": "searxng",
+                }
             ],
             suggestions=["related search"],
             provider="searxng",
@@ -67,7 +72,20 @@ class TestWebSearchResult:
         assert response[0]["type"] == "text"
         assert "Test Title" in response[0]["text"]
         assert "https://example.com" in response[0]["text"]
+        assert "Source" in response[0]["text"]
         assert "related search" in response[0]["text"]
+
+    def test_to_mcp_response_with_error(self):
+        result = WebSearchResult(
+            query="test query",
+            results=[],
+            suggestions=[],
+            provider="error",
+            total=0,
+            error="Search failed",
+        )
+        response = result.to_mcp_response()
+        assert "Search failed" in response[0]["text"]
 
     def test_to_mcp_response_empty(self):
         result = WebSearchResult(

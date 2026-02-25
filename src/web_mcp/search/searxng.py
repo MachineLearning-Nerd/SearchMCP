@@ -4,6 +4,7 @@ import httpx
 
 from web_mcp.config import settings
 from web_mcp.search.base import SearchProvider, SearchResponse, SearchResult
+from web_mcp.search.relevance import select_engines_for_query
 from web_mcp.utils.logger import get_logger
 
 
@@ -73,8 +74,19 @@ class SearxNGProvider(SearchProvider):
             query=query,
         )
 
+    def _resolve_candidate_limit(self, limit: int) -> int:
+        if limit <= 0:
+            return settings.SEARCH_MAX_CANDIDATES
+
+        multiplier = max(1, settings.SEARCH_CANDIDATE_MULTIPLIER)
+        expanded = limit * multiplier
+        bounded = min(settings.SEARCH_MAX_CANDIDATES, expanded)
+        return max(limit, bounded)
+
     async def search(self, query: str, category: str = "general", limit: int = 5) -> SearchResponse:
         category = self._validate_category(category)
+        requested_limit = max(1, limit)
+        candidate_limit = self._resolve_candidate_limit(requested_limit)
 
         params: dict[str, Any] = {
             "format": "json",
@@ -82,11 +94,28 @@ class SearxNGProvider(SearchProvider):
             "categories": category,
         }
 
+        selected_engines: list[str] | None = None
+        if category == "general":
+            selected_engines = select_engines_for_query(
+                query=query,
+                mode=settings.SEARCH_ENGINE_PROFILE_MODE,
+                security_engines_raw=settings.SEARCH_SECURITY_ENGINES,
+                general_engines_raw=settings.SEARCH_GENERAL_ENGINES,
+            )
+            if selected_engines:
+                params["engines"] = ",".join(selected_engines)
+
         url = f"{self._base_url}/search"
 
         self._logger.debug(
             f"Searching SearxNG: {query}",
-            extra={"url": url, "category": category, "limit": limit},
+            extra={
+                "url": url,
+                "category": category,
+                "limit": requested_limit,
+                "candidate_limit": candidate_limit,
+                "engines": selected_engines,
+            },
         )
 
         try:
@@ -108,7 +137,7 @@ class SearxNGProvider(SearchProvider):
                     query=query,
                 )
 
-            search_response = self._parse_response(data, query, limit)
+            search_response = self._parse_response(data, query, candidate_limit)
 
             self._logger.info(
                 f"SearxNG search completed: {len(search_response.results)} results",
@@ -116,6 +145,8 @@ class SearxNGProvider(SearchProvider):
                     "query": query,
                     "category": category,
                     "results_count": len(search_response.results),
+                    "candidate_limit": candidate_limit,
+                    "engines": selected_engines,
                 },
             )
 

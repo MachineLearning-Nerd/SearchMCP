@@ -9,6 +9,8 @@ A privacy-focused web search MCP (Model Context Protocol) server that provides w
 - **Search Suggestions** - Get query suggestions for better searches
 - **Privacy-Focused** - Uses SearxNG metasearch engine
 - **Fallback Support** - Automatically falls back to Google scraping if SearxNG is unavailable
+- **Relevance Ranking** - Query-aware reranking, deduplication, and low-signal filtering
+- **Security-Aware Search** - CVE/security queries prioritize trusted advisory sources
 - **Rate Limiting** - Built-in rate limiting to prevent abuse
 - **Docker Ready** - Single-container deployment with SearxNG included
 
@@ -69,6 +71,12 @@ python -m web_mcp.server
 |----------|---------|-------------|
 | `SEARXNG_URL` | `http://localhost:8080` | SearxNG server URL |
 | `SEARXNG_TIMEOUT` | `10` | Request timeout in seconds |
+| `SEARCH_ENGINE_PROFILE_MODE` | `auto` | Query-aware engine profile mode (`auto` or `off`) |
+| `SEARCH_SECURITY_ENGINES` | `brave,bing,duckduckgo,wikipedia,github,stackoverflow` | Engines used for security/CVE queries |
+| `SEARCH_GENERAL_ENGINES` | `` | Engines for general queries (empty = SearxNG defaults) |
+| `SEARCH_CANDIDATE_MULTIPLIER` | `5` | Candidate expansion before reranking |
+| `SEARCH_MAX_CANDIDATES` | `30` | Maximum candidates before reranking |
+| `SEARCH_MIN_QUALITY_SCORE` | `2.5` | Security-query quality threshold for fallback merge |
 | `FALLBACK_ENABLED` | `true` | Enable Google scraping fallback |
 | `RATE_LIMIT_REQUESTS` | `30` | Max requests per period |
 | `RATE_LIMIT_PERIOD` | `60` | Rate limit period in seconds |
@@ -84,6 +92,12 @@ Create a `.env` file in the project root:
 ```env
 SEARXNG_URL=http://localhost:8080
 SEARXNG_TIMEOUT=10
+SEARCH_ENGINE_PROFILE_MODE=auto
+SEARCH_SECURITY_ENGINES=brave,bing,duckduckgo,wikipedia,github,stackoverflow
+SEARCH_GENERAL_ENGINES=
+SEARCH_CANDIDATE_MULTIPLIER=5
+SEARCH_MAX_CANDIDATES=30
+SEARCH_MIN_QUALITY_SCORE=2.5
 FALLBACK_ENABLED=true
 RATE_LIMIT_REQUESTS=30
 RATE_LIMIT_PERIOD=60
@@ -270,6 +284,49 @@ ruff check src tests
 # Run type checking
 mypy src
 ```
+
+### Manual Local Smoke Test
+
+Use this when you want to manually verify tool behavior and inspect returned output.
+
+```bash
+# 1) Start local SearxNG+MCP container
+docker build -t web-mcp:latest .
+docker run -d --rm --name web-mcp-smoke -p 18080:8080 web-mcp:latest
+
+# 2) Run manual smoke script from repo root (with your virtualenv active)
+python test.py
+
+# Optional: custom inputs
+python test.py \
+  --searxng-url http://127.0.0.1:18080 \
+  --query "python asyncio" \
+  --suggest-query "python asyn" \
+  --content-url "http://example.com" \
+  --limit 3 \
+  --max-length 800
+
+# 3) Cleanup
+docker rm -f web-mcp-smoke
+```
+
+What `test.py` prints:
+
+- `web_search output`: title, URL, and snippet for each result
+- `get_suggestions output`: full suggestion list
+- `fetch_content output`: title, source, URL, and content preview
+
+Script behavior notes:
+
+- If you pass only one of `--query` or `--suggest-query`, that value is reused for both
+- If query text contains a CVE ID (for example `CVE-2026-26007`) and `--content-url` is not set, `test.py` tries the NVD detail page first for content extraction
+
+Result interpretation:
+
+- `error=` with no value means success
+- If SearxNG is unavailable, `web_search` can fall back to Google (when enabled)
+- For security/CVE queries, low-quality SearxNG results can trigger a quality-based Google merge
+- `SearxNG check: OK (200)` confirms the local SearxNG endpoint is reachable
 
 ### Project Structure
 
