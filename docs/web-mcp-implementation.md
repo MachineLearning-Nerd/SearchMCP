@@ -119,7 +119,7 @@ SearchMCP/
 ├── docker/
 │   ├── searxng/
 │   │   └── settings.yml           # SearxNG configuration
-│   └── supervisord.conf           # Process manager config
+│   └── entrypoint.sh              # Stdio startup and readiness checks
 ├── tests/
 │   ├── __init__.py
 │   ├── test_searxng.py
@@ -218,7 +218,7 @@ SearchMCP/
 | Task ID | Task | Description | Deliverable |
 |---------|------|-------------|-------------|
 | 6.1 | SearxNG configuration | settings.yml with JSON format enabled | docker/searxng/settings.yml |
-| 6.2 | Supervisord config | Run SearxNG and MCP in one container | docker/supervisord.conf |
+| 6.2 | Entrypoint startup script | Start SearxNG in background, then MCP server in foreground | docker/entrypoint.sh |
 | 6.3 | Multi-stage Dockerfile | Build SearxNG stage, combine with Python | Dockerfile |
 | 6.4 | .dockerignore | Exclude unnecessary files | .dockerignore |
 | 6.5 | Environment setup | Configure SEARXNG_URL internally | Environment variables |

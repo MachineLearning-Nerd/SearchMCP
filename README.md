@@ -31,7 +31,7 @@ A privacy-focused web search MCP (Model Context Protocol) server that provides w
 docker build -t web-mcp:latest .
 
 # Run the container
-docker run -i web-mcp:latest
+docker run --rm -i web-mcp:latest
 ```
 
 ### Option 2: Python Package
@@ -86,7 +86,6 @@ python -m web_mcp.server
 | `DEFAULT_SEARCH_LIMIT` | `5` | Default number of search results |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 | `JSON_LOGS` | `false` | Output logs in JSON format |
-| `MCP_STDIO_MODE` | `true` | Container mode: stdio-first startup (recommended for MCP clients) |
 
 ### Configuration File
 
@@ -109,7 +108,6 @@ FETCH_ALLOW_PRIVATE_NETWORK=false
 DEFAULT_SEARCH_LIMIT=5
 LOG_LEVEL=INFO
 JSON_LOGS=false
-MCP_STDIO_MODE=true
 ```
 
 ## Usage with MCP Clients
@@ -123,7 +121,7 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
   "mcpServers": {
     "web-mcp": {
       "command": "docker",
-      "args": ["run", "-i", "web-mcp:latest"]
+      "args": ["run", "--rm", "-i", "web-mcp:latest"]
     }
   }
 }
@@ -299,6 +297,8 @@ Use this to verify the real MCP integration path used by CLI agents.
 `docker run --rm -i web-mcp:latest`
 and validates `initialize`, `list_tools`, and `call_tool` flows.
 
+The container contract is stdio-only. Detached mode (`docker run -d ...`) is intentionally not supported for MCP clients.
+
 ```bash
 # 1) Build image
 docker build -t web-mcp:latest .
@@ -314,6 +314,9 @@ docker build -t web-mcp:latest .
   --content-url "https://example.com" \
   --limit 3 \
   --max-length 800
+
+# Optional: full response blocks
+.venv/bin/python test.py --verbose
 ```
 
 What `test.py` verifies:
@@ -325,7 +328,7 @@ What `test.py` verifies:
 Script behavior notes:
 
 - If you pass only one of `--query` or `--suggest-query`, that value is reused for both
-- If query text contains a CVE ID (for example `CVE-2026-26007`) and `--content-url` is not set, `test.py` tries the NVD detail page first for content extraction
+- `test.py` prints compact pass/fail summaries by default; use `--verbose` to show full tool outputs
 - Use `--docker-command` if your environment uses a different container runtime command
 
 ### Project Structure
@@ -353,7 +356,6 @@ web-mcp/
 ├── tests/                  # Test suite
 ├── docker/                 # Docker configuration
 │   ├── searxng/           # SearxNG settings
-│   ├── supervisord.conf   # Process manager config
 │   └── entrypoint.sh      # Container entrypoint
 ├── Dockerfile             # Multi-stage Docker build
 ├── pyproject.toml         # Python project config
@@ -373,7 +375,7 @@ Error: Failed to connect to SearxNG
 
 - Ensure SearxNG is running: `curl http://localhost:8080/config`
 - Check `SEARXNG_URL` environment variable
-- If using Docker, ensure both services are running (check supervisord logs)
+- If using Docker via MCP stdio, ensure the image is current (`docker build -t web-mcp:latest .`)
 
 **2. Google Rate Limiting**
 
@@ -419,9 +421,6 @@ python -m web_mcp.server
 ```bash
 # Run container interactively
 docker run -it --entrypoint /bin/sh web-mcp:latest
-
-# Check supervisord status
-docker exec <container> /usr/local/searxng/.venv/bin/supervisorctl status
 
 # View logs
 docker logs <container>

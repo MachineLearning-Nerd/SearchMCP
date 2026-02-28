@@ -6,13 +6,17 @@ from __future__ import annotations
 import argparse
 import asyncio
 import re
-from collections.abc import Iterable
+import sys
 
 from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.types import CallToolResult
 
 REQUIRED_TOOLS = {"web_search", "fetch_content", "get_suggestions"}
+DEFAULT_SEARCH_QUERY = "python asyncio"
+DEFAULT_SUGGEST_QUERY = "python asyn"
+FALLBACK_CONTENT_URL = "https://example.com"
+URL_PATTERN = re.compile(r"https?://[^\s)\]>]+")
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,20 +48,22 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--limit", type=int, default=3, help="Result limit for web_search")
     parser.add_argument("--max-length", type=int, default=800, help="Max length for fetch_content")
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print full tool response blocks",
+    )
     return parser.parse_args()
 
 
 def resolve_queries(args: argparse.Namespace) -> None:
-    default_search_query = "python asyncio"
-    default_suggest_query = "python asyn"
-
     if args.query and not args.suggest_query:
         args.suggest_query = args.query
     elif args.suggest_query and not args.query:
         args.query = args.suggest_query
     elif not args.query and not args.suggest_query:
-        args.query = default_search_query
-        args.suggest_query = default_suggest_query
+        args.query = DEFAULT_SEARCH_QUERY
+        args.suggest_query = DEFAULT_SUGGEST_QUERY
 
 
 def shorten(value: str, limit: int) -> str:
@@ -76,63 +82,37 @@ def extract_text_blocks(result: CallToolResult) -> list[str]:
     return blocks
 
 
-def extract_urls(text: str) -> list[str]:
-    urls = re.findall(r"https?://[^\s)\]>]+", text)
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for url in urls:
-        normalized = url.rstrip(".,;)")
-        if normalized not in seen:
-            seen.add(normalized)
-            ordered.append(normalized)
-    return ordered
+def first_url_from_blocks(text_blocks: list[str]) -> str | None:
+    for block in text_blocks:
+        for match in URL_PATTERN.findall(block):
+            return match.rstrip(".,;)")
+    return None
 
 
-def extract_cve_ids(text: str) -> list[str]:
-    return re.findall(r"CVE-\d{4}-\d{4,}", text, flags=re.IGNORECASE)
-
-
-def collect_content_url_candidates(
-    explicit_url: str | None,
-    search_query: str,
-    search_output_text: str,
-) -> list[str]:
+def content_url_candidates(explicit_url: str | None, web_text_blocks: list[str]) -> list[str]:
     if explicit_url:
         return [explicit_url]
 
-    skip_suffixes = (
-        ".txt",
-        ".csv",
-        ".tsv",
-        ".log",
-        ".json",
-        ".xml",
-        ".counts",
-        ".vocab",
+    primary = first_url_from_blocks(web_text_blocks)
+    if not primary:
+        return [FALLBACK_CONTENT_URL]
+    if primary == FALLBACK_CONTENT_URL:
+        return [primary]
+    return [primary, FALLBACK_CONTENT_URL]
+
+
+def emit(status: str, message: str) -> None:
+    print(f"[{status}] {message}")
+
+
+def emit_tool_summary(name: str, result: CallToolResult) -> None:
+    emit(
+        "PASS" if not result.isError else "FAIL",
+        f"{name}: isError={result.isError} content_items={len(result.content)}",
     )
 
-    preferred: list[str] = []
-    fallback: list[str] = []
 
-    for cve_id in extract_cve_ids(search_query):
-        preferred.append(f"https://nvd.nist.gov/vuln/detail/{cve_id.upper()}")
-
-    for url in extract_urls(search_output_text):
-        lowered = url.lower()
-        if lowered.endswith(skip_suffixes):
-            fallback.append(url)
-        else:
-            preferred.append(url)
-
-    candidates = preferred + fallback
-    if not candidates:
-        candidates.append("https://example.com")
-    return candidates
-
-
-def print_tool_result(name: str, result: CallToolResult, text_blocks: Iterable[str]) -> None:
-    blocks = list(text_blocks)
-    print(f"{name}: isError={result.isError} content_items={len(result.content)}")
+def emit_verbose_blocks(name: str, blocks: list[str]) -> None:
     print(f"{name} output:")
     if not blocks:
         print("  (no text content)")
@@ -144,88 +124,102 @@ def print_tool_result(name: str, result: CallToolResult, text_blocks: Iterable[s
             print(f"  {line}")
 
 
+async def call_tool_checked(
+    session: ClientSession,
+    name: str,
+    arguments: dict[str, object],
+    *,
+    verbose: bool,
+) -> list[str]:
+    result = await session.call_tool(name, arguments)
+    blocks = extract_text_blocks(result)
+    emit_tool_summary(name, result)
+    if verbose:
+        emit_verbose_blocks(name, blocks)
+    if result.isError:
+        raise RuntimeError(f"{name} returned error")
+    return blocks
+
+
 async def run_checks(args: argparse.Namespace) -> None:
     server_parameters = StdioServerParameters(
         command=args.docker_command,
         args=["run", "--rm", "-i", args.image],
     )
 
-    print(f"Starting MCP server via: {args.docker_command} run --rm -i {args.image}")
+    emit("INFO", f"Starting MCP server via: {args.docker_command} run --rm -i {args.image}")
 
     async with stdio_client(server_parameters) as streams:
         async with ClientSession(*streams) as session:
             init = await session.initialize()
-            print(
-                "Initialized MCP session:",
-                f"server={init.serverInfo.name}",
-                f"version={init.serverInfo.version}",
+            emit(
+                "PASS",
+                f"initialize: server={init.serverInfo.name} version={init.serverInfo.version}",
             )
 
             tools_result = await session.list_tools()
             available_tools = {tool.name for tool in tools_result.tools}
-            print("Available tools:", ", ".join(sorted(available_tools)))
+            emit("PASS", f"list_tools: {', '.join(sorted(available_tools))}")
 
             missing = REQUIRED_TOOLS - available_tools
             if missing:
                 raise RuntimeError(f"Missing expected tools: {', '.join(sorted(missing))}")
 
-            web_result = await session.call_tool(
+            web_text_blocks = await call_tool_checked(
+                session,
                 "web_search",
                 {
                     "query": args.query,
                     "limit": args.limit,
                 },
+                verbose=args.verbose,
             )
-            web_text_blocks = extract_text_blocks(web_result)
-            print_tool_result("web_search", web_result, web_text_blocks)
-            if web_result.isError:
-                raise RuntimeError("web_search returned error")
 
-            suggestions_result = await session.call_tool(
+            await call_tool_checked(
+                session,
                 "get_suggestions",
                 {
                     "query": args.suggest_query,
                 },
+                verbose=args.verbose,
             )
-            suggestions_text_blocks = extract_text_blocks(suggestions_result)
-            print_tool_result("get_suggestions", suggestions_result, suggestions_text_blocks)
-            if suggestions_result.isError:
-                raise RuntimeError("get_suggestions returned error")
 
-            content_result: CallToolResult | None = None
-            selected_url = ""
-            search_text = "\n".join(web_text_blocks)
-            candidates = collect_content_url_candidates(args.content_url, args.query, search_text)
-
-            for candidate_url in candidates:
-                selected_url = candidate_url
-                candidate_result = await session.call_tool(
+            fetch_candidates = content_url_candidates(args.content_url, web_text_blocks)
+            fetch_success = False
+            for candidate_url in fetch_candidates:
+                emit("INFO", f"fetch_content url={candidate_url}")
+                result = await session.call_tool(
                     "fetch_content",
                     {
                         "url": candidate_url,
                         "max_length": args.max_length,
                     },
                 )
-                content_result = candidate_result
-                if not candidate_result.isError:
+                blocks = extract_text_blocks(result)
+                emit_tool_summary("fetch_content", result)
+                if args.verbose:
+                    emit_verbose_blocks("fetch_content", blocks)
+                if not result.isError:
+                    fetch_success = True
                     break
 
-            if content_result is None:
-                raise RuntimeError("No content candidate URL available")
+            if not fetch_success:
+                raise RuntimeError("fetch_content returned error for all candidate URLs")
 
-            print(f"fetch_content requested url: {selected_url}")
-            content_text_blocks = extract_text_blocks(content_result)
-            print_tool_result("fetch_content", content_result, content_text_blocks)
-            if content_result.isError:
-                raise RuntimeError("fetch_content returned error for all candidates")
+    emit("PASS", "Smoke test completed")
 
 
 def main() -> None:
     args = parse_args()
     resolve_queries(args)
-    print(f"web_search query={args.query}")
-    print(f"suggestions query={args.suggest_query}")
-    asyncio.run(run_checks(args))
+    emit("INFO", f"web_search query={args.query}")
+    emit("INFO", f"suggestions query={args.suggest_query}")
+
+    try:
+        asyncio.run(run_checks(args))
+    except Exception as exc:  # pragma: no cover - exercised in real smoke runs
+        print(f"[FAIL] {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":

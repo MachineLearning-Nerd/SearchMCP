@@ -1,5 +1,5 @@
 # Web MCP Server Docker image
-# Single container: SearxNG + MCP server
+# Single container: SearxNG + MCP server (stdio mode)
 
 FROM searxng/searxng:2026.2.27-8e9ed5f9b
 
@@ -16,7 +16,7 @@ ENV PYTHONUNBUFFERED=1 \
     LOG_LEVEL=INFO \
     FALLBACK_ENABLED=true
 
-RUN mkdir -p /var/log/supervisor /var/run /app /etc/supervisor/conf.d \
+RUN mkdir -p /var/log/supervisor /var/run /app \
     && /usr/local/searxng/.venv/bin/python -m ensurepip \
     && /usr/local/searxng/.venv/bin/python -m pip install --no-cache-dir \
         mcp>=1.0.0 \
@@ -26,11 +26,9 @@ RUN mkdir -p /var/log/supervisor /var/run /app /etc/supervisor/conf.d \
         trafilatura>=1.8.0 \
         pydantic>=2.0.0 \
         pydantic-settings>=2.0.0 \
-        typing-extensions>=4.9.0 \
-        supervisor>=4.2.0
+        typing-extensions>=4.9.0
 
 COPY docker/searxng/settings.yml /etc/searxng/settings.yml
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/entrypoint.sh /entrypoint.sh
 COPY src/web_mcp /app/web_mcp
 COPY pyproject.toml /app/pyproject.toml
