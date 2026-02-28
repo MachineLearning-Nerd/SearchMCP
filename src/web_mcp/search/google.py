@@ -19,6 +19,7 @@ USER_AGENTS: Final[list[str]] = [
 ]
 
 GOOGLE_SEARCH_URL: Final[str] = "https://www.google.com/search"
+GOOGLE_SUGGEST_URL: Final[str] = "https://suggestqueries.google.com/complete/search"
 GOOGLE_TIMEOUT: int = 10  # Default timeout for Google requests
 
 
@@ -153,4 +154,33 @@ class GoogleProvider(SearchProvider):
             return None
 
     async def get_suggestions(self, query: str) -> list[str]:
-        return []
+        params = {
+            "client": "firefox",
+            "q": query,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.get(
+                    GOOGLE_SUGGEST_URL,
+                    params=params,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code == 429:
+                    logger.warning("Google suggestions rate limit hit (429)", extra={"query": query})
+                    return []
+
+                response.raise_for_status()
+
+                payload = response.json()
+                if not isinstance(payload, list) or len(payload) < 2:
+                    return []
+
+                suggestions = payload[1]
+                if not isinstance(suggestions, list):
+                    return []
+
+                return [str(item) for item in suggestions if str(item).strip()]
+        except Exception as e:
+            logger.warning(f"Failed to fetch Google suggestions: {e}", extra={"query": query})
+            return []

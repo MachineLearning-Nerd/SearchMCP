@@ -5,9 +5,4 @@ lxml>=5.0.0
 trafilatura>=1.8.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
-
-pytest>=8.0.0
-pytest-asyncio>=0.23.0
-pytest-cov>=4.1.0
-ruff>=0.3.0
-mypy>=1.8.0
+typing-extensions>=4.9.0

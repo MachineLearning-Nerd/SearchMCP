@@ -10,6 +10,8 @@ This server provides three tools:
 
 import asyncio
 import signal
+import time
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
@@ -17,7 +19,6 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import (
     AudioContent,
-    CallToolRequest,
     CallToolResult,
     EmbeddedResource,
     ImageContent,
@@ -29,6 +30,7 @@ from mcp.types import (
 
 from web_mcp import __version__
 from web_mcp.config import settings
+from web_mcp.search.provider_registry import close_search_provider
 from web_mcp.tools import ALL_TOOLS, TOOL_HANDLERS
 from web_mcp.utils.logger import get_logger, setup_logging
 
@@ -63,12 +65,19 @@ def create_server() -> Server:
         return ListToolsResult(tools=tools)
 
     @srv.call_tool()  # type: ignore[untyped-decorator]
-    async def call_tool(request: CallToolRequest) -> CallToolResult:
+    async def call_tool(tool_name: str, arguments: dict[str, Any]) -> CallToolResult:
         """Handle tool invocation."""
-        tool_name = request.params.name
-        arguments: dict[str, Any] = dict(request.params.arguments or {})
+        request_id = uuid.uuid4().hex[:12]
+        start = time.perf_counter()
 
-        logger.info(f"Calling tool: {tool_name}", extra={"tool": tool_name, "arguments": arguments})
+        logger.info(
+            f"Calling tool: {tool_name}",
+            extra={
+                "tool": tool_name,
+                "arguments": arguments,
+                "request_id": request_id,
+            },
+        )
 
         if tool_name not in TOOL_HANDLERS:
             logger.error(f"Unknown tool: {tool_name}")
@@ -105,10 +114,30 @@ def create_server() -> Server:
                 ]
 
             is_error = hasattr(result, "error") and bool(result.error)
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            logger.info(
+                "Tool call completed",
+                extra={
+                    "tool": tool_name,
+                    "request_id": request_id,
+                    "duration_ms": duration_ms,
+                    "result_count": len(content),
+                    "is_error": is_error,
+                },
+            )
             return CallToolResult(content=content, isError=is_error)
 
         except Exception as e:
-            logger.error(f"Tool execution failed: {e}", extra={"tool": tool_name, "error": str(e)})
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            logger.error(
+                f"Tool execution failed: {e}",
+                extra={
+                    "tool": tool_name,
+                    "request_id": request_id,
+                    "duration_ms": duration_ms,
+                    "error": str(e),
+                },
+            )
             return CallToolResult(
                 content=[
                     TextContent(
@@ -161,6 +190,7 @@ async def run_server() -> None:
                 logger.error(f"Server error: {e}")
                 raise
         finally:
+            await close_search_provider()
             logger.info("Server stopped")
 
 

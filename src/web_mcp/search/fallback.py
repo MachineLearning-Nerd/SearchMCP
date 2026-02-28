@@ -106,18 +106,30 @@ class FallbackSearchProvider(SearchProvider):
                     "query": query,
                     "quality_score": searxng_ranked.quality_score,
                     "quality_threshold": self._min_quality_score,
+                    "fallback_reason": "quality_below_threshold",
                 },
             )
         else:
             self._logger.info(
                 "SearxNG returned no results, falling back to Google",
-                extra={"query": query, "provider": "google"},
+                extra={
+                    "query": query,
+                    "provider": "google",
+                    "fallback_reason": "searxng_empty",
+                },
             )
 
         google_response = await self._google.search(query, category, limit)
         merged = merge_ranked_results(query, searxng_results, google_response.results, limit)
 
         if not merged.results:
+            self._logger.info(
+                "Fallback search returned no results",
+                extra={
+                    "query": query,
+                    "fallback_reason": "google_failed",
+                },
+            )
             return SearchResponse(
                 results=[],
                 suggestions=searxng_response.suggestions,

@@ -4,10 +4,14 @@ from urllib.parse import urlparse
 
 from web_mcp.config import settings
 from web_mcp.search.base import SearchResponse
-from web_mcp.search.fallback import FallbackSearchProvider
+from web_mcp.search.provider_registry import get_search_provider
 from web_mcp.utils.logger import get_logger
 
 logger = get_logger("web_mcp")
+MIN_LIMIT = 1
+MAX_LIMIT = 10
+VALID_CATEGORIES = {"general", "images", "videos", "news", "science", "files"}
+DEFAULT_LIMIT = min(MAX_LIMIT, max(MIN_LIMIT, settings.DEFAULT_SEARCH_LIMIT))
 
 
 @dataclass
@@ -96,18 +100,47 @@ def _extract_domain(url: str) -> str:
     return parsed.netloc
 
 
-_search_provider: FallbackSearchProvider | None = None
+def _normalize_query(query: str) -> str:
+    if not isinstance(query, str):
+        raise ValueError("query must be a non-empty string")
+    normalized = " ".join(query.split())
+    if not normalized:
+        raise ValueError("query must be a non-empty string")
+    return normalized
 
 
-def _get_provider() -> FallbackSearchProvider:
-    global _search_provider
-    if _search_provider is None:
-        _search_provider = FallbackSearchProvider()
-    return _search_provider
+def _normalize_category(category: str) -> str:
+    if not isinstance(category, str):
+        valid = ", ".join(sorted(VALID_CATEGORIES))
+        raise ValueError(f"category must be one of: {valid}")
+    normalized = category.strip().lower()
+    if normalized not in VALID_CATEGORIES:
+        valid = ", ".join(sorted(VALID_CATEGORIES))
+        raise ValueError(f"category must be one of: {valid}")
+    return normalized
+
+
+def _normalize_limit(limit: int | float | None) -> int:
+    if limit is None:
+        limit = DEFAULT_LIMIT
+
+    if isinstance(limit, bool) or not isinstance(limit, (int, float)):
+        raise ValueError(f"limit must be an integer between {MIN_LIMIT} and {MAX_LIMIT}")
+
+    if isinstance(limit, float):
+        if not limit.is_integer():
+            raise ValueError(f"limit must be an integer between {MIN_LIMIT} and {MAX_LIMIT}")
+        limit = int(limit)
+
+    resolved = int(limit)
+    if resolved < MIN_LIMIT or resolved > MAX_LIMIT:
+        raise ValueError(f"limit must be between {MIN_LIMIT} and {MAX_LIMIT}")
+
+    return resolved
 
 
 async def web_search(
-    query: str, category: str = "general", limit: int | None = None
+    query: str, category: str = "general", limit: int | float | None = None
 ) -> WebSearchResult:
     """
     Search the web for information.
@@ -120,31 +153,40 @@ async def web_search(
     Returns:
         WebSearchResult with search results
     """
-    if limit is None:
-        limit = settings.DEFAULT_SEARCH_LIMIT
-
-    logger.info(
-        "Performing web search",
-        extra={"query": query, "category": category, "limit": limit},
-    )
-
     try:
-        provider = _get_provider()
-        response: SearchResponse = await provider.search(query, category, limit)
+        normalized_query = _normalize_query(query)
+        normalized_category = _normalize_category(category)
+        normalized_limit = _normalize_limit(limit)
+
+        logger.info(
+            "Performing web search",
+            extra={
+                "query": normalized_query,
+                "category": normalized_category,
+                "limit": normalized_limit,
+            },
+        )
+
+        provider = get_search_provider()
+        response: SearchResponse = await provider.search(
+            normalized_query,
+            normalized_category,
+            normalized_limit,
+        )
 
         results = [r.to_dict() for r in response.results]
 
         logger.info(
             "Search completed",
             extra={
-                "query": query,
+                "query": normalized_query,
                 "provider": response.provider,
                 "results_count": len(results),
             },
         )
 
         return WebSearchResult(
-            query=query,
+            query=normalized_query,
             results=results,
             suggestions=response.suggestions,
             provider=response.provider,
@@ -157,7 +199,7 @@ async def web_search(
             extra={"query": query, "error": str(e)},
         )
         return WebSearchResult(
-            query=query,
+            query=normalized_query if "normalized_query" in locals() else query,
             results=[],
             suggestions=[],
             provider="error",
@@ -182,8 +224,11 @@ TOOL_SCHEMA = {
                 "enum": ["general", "images", "videos", "news", "science", "files"],
             },
             "limit": {
-                "type": "number",
+                "type": "integer",
                 "description": "Maximum number of results to return (default: 5)",
+                "minimum": MIN_LIMIT,
+                "maximum": MAX_LIMIT,
+                "default": DEFAULT_LIMIT,
             },
         },
         "required": ["query"],

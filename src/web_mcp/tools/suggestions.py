@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from web_mcp.search.fallback import FallbackSearchProvider
+from web_mcp.search.provider_registry import get_search_provider
 from web_mcp.utils.logger import get_logger
 
 logger = get_logger("web_mcp")
@@ -52,15 +53,13 @@ class SuggestionsResult:
         ]
 
 
-_suggestions_provider: FallbackSearchProvider | None = None
-
-
-def _get_provider() -> FallbackSearchProvider:
-    """Get or create a singleton FallbackSearchProvider instance."""
-    global _suggestions_provider
-    if _suggestions_provider is None:
-        _suggestions_provider = FallbackSearchProvider()
-    return _suggestions_provider
+def _normalize_query(query: str) -> str:
+    if not isinstance(query, str):
+        raise ValueError("query must be a non-empty string")
+    normalized = " ".join(query.split())
+    if not normalized:
+        raise ValueError("query must be a non-empty string")
+    return normalized
 
 
 async def get_suggestions(
@@ -76,21 +75,26 @@ async def get_suggestions(
     Returns:
         SuggestionsResult with suggested queries
     """
-    logger.info(f"Getting suggestions for query: {query}", extra={"query": query})
-
-    if provider is None:
-        provider = _get_provider()
-
     try:
-        suggestions = await provider.get_suggestions(query)
+        normalized_query = _normalize_query(query)
+
+        logger.info(
+            f"Getting suggestions for query: {normalized_query}",
+            extra={"query": normalized_query},
+        )
+
+        if provider is None:
+            provider = get_search_provider()
+
+        suggestions = await provider.get_suggestions(normalized_query)
 
         logger.info(
             f"Retrieved {len(suggestions)} suggestions",
-            extra={"query": query, "suggestions_count": len(suggestions)},
+            extra={"query": normalized_query, "suggestions_count": len(suggestions)},
         )
 
         return SuggestionsResult(
-            query=query,
+            query=normalized_query,
             suggestions=suggestions,
         )
 
@@ -100,7 +104,7 @@ async def get_suggestions(
             extra={"query": query, "error": str(e)},
         )
         return SuggestionsResult(
-            query=query,
+            query=normalized_query if "normalized_query" in locals() else query,
             suggestions=[],
             error=str(e),
         )

@@ -43,6 +43,7 @@ cd web-mcp
 
 # Install dependencies
 pip install -r requirements.txt
+pip install -r requirements-dev.txt  # Optional: tests, lint, type checks
 
 # Or install as package
 pip install -e .
@@ -81,9 +82,11 @@ python -m web_mcp.server
 | `RATE_LIMIT_REQUESTS` | `30` | Max requests per period |
 | `RATE_LIMIT_PERIOD` | `60` | Rate limit period in seconds |
 | `MAX_CONTENT_LENGTH` | `10000` | Max characters in fetched content |
+| `FETCH_ALLOW_PRIVATE_NETWORK` | `false` | Allow fetching localhost/private network URLs |
 | `DEFAULT_SEARCH_LIMIT` | `5` | Default number of search results |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 | `JSON_LOGS` | `false` | Output logs in JSON format |
+| `MCP_STDIO_MODE` | `true` | Container mode: stdio-first startup (recommended for MCP clients) |
 
 ### Configuration File
 
@@ -102,9 +105,11 @@ FALLBACK_ENABLED=true
 RATE_LIMIT_REQUESTS=30
 RATE_LIMIT_PERIOD=60
 MAX_CONTENT_LENGTH=10000
+FETCH_ALLOW_PRIVATE_NETWORK=false
 DEFAULT_SEARCH_LIMIT=5
 LOG_LEVEL=INFO
 JSON_LOGS=false
+MCP_STDIO_MODE=true
 ```
 
 ## Usage with MCP Clients
@@ -156,7 +161,7 @@ Search the web for information.
 |-----------|------|----------|-------------|
 | `query` | string | Yes | The search query |
 | `category` | string | No | Search category: `general`, `images`, `videos`, `news`, `science`, `files` |
-| `limit` | number | No | Maximum results (default: 5, max: 10) |
+| `limit` | integer | No | Maximum results (default: 5, min: 1, max: 10) |
 
 **Example:**
 
@@ -194,13 +199,14 @@ Official Python asyncio documentation...
 ### fetch_content
 
 Extract readable content from a URL.
+By default, only public `http`/`https` targets are allowed (`FETCH_ALLOW_PRIVATE_NETWORK=false`).
 
 **Parameters:**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `url` | string | Yes | The URL to fetch content from |
-| `max_length` | number | No | Maximum content length (default: 10000) |
+| `max_length` | integer | No | Maximum content length (default: 10000, min: 500, max: 20000) |
 
 **Example:**
 
@@ -285,48 +291,42 @@ ruff check src tests
 mypy src
 ```
 
-### Manual Local Smoke Test
+### Manual MCP Smoke Test (Container + stdio)
 
-Use this when you want to manually verify tool behavior and inspect returned output.
+Use this to verify the real MCP integration path used by CLI agents.
+
+`test.py` starts the containerized MCP server as a child process with:
+`docker run --rm -i web-mcp:latest`
+and validates `initialize`, `list_tools`, and `call_tool` flows.
 
 ```bash
-# 1) Start local SearxNG+MCP container
+# 1) Build image
 docker build -t web-mcp:latest .
-docker run -d --rm --name web-mcp-smoke -p 18080:8080 web-mcp:latest
 
-# 2) Run manual smoke script from repo root (with your virtualenv active)
-python test.py
+# 2) Run smoke script from repo root (with your virtualenv active)
+.venv/bin/python test.py
 
 # Optional: custom inputs
-python test.py \
-  --searxng-url http://127.0.0.1:18080 \
+.venv/bin/python test.py \
+  --image web-mcp:latest \
   --query "python asyncio" \
   --suggest-query "python asyn" \
-  --content-url "http://example.com" \
+  --content-url "https://example.com" \
   --limit 3 \
   --max-length 800
-
-# 3) Cleanup
-docker rm -f web-mcp-smoke
 ```
 
-What `test.py` prints:
+What `test.py` verifies:
 
-- `web_search output`: title, URL, and snippet for each result
-- `get_suggestions output`: full suggestion list
-- `fetch_content output`: title, source, URL, and content preview
+- MCP session initialization against containerized server
+- Expected tools are registered: `web_search`, `fetch_content`, `get_suggestions`
+- Tool calls succeed over MCP stdio transport
 
 Script behavior notes:
 
 - If you pass only one of `--query` or `--suggest-query`, that value is reused for both
 - If query text contains a CVE ID (for example `CVE-2026-26007`) and `--content-url` is not set, `test.py` tries the NVD detail page first for content extraction
-
-Result interpretation:
-
-- `error=` with no value means success
-- If SearxNG is unavailable, `web_search` can fall back to Google (when enabled)
-- For security/CVE queries, low-quality SearxNG results can trigger a quality-based Google merge
-- `SearxNG check: OK (200)` confirms the local SearxNG endpoint is reachable
+- Use `--docker-command` if your environment uses a different container runtime command
 
 ### Project Structure
 
@@ -340,7 +340,8 @@ web-mcp/
 │   │   ├── base.py         # Abstract search provider
 │   │   ├── searxng.py      # SearxNG provider
 │   │   ├── google.py       # Google scraping fallback
-│   │   └── fallback.py     # Fallback logic
+│   │   ├── fallback.py     # Fallback logic
+│   │   └── provider_registry.py # Shared provider lifecycle
 │   ├── tools/
 │   │   ├── web_search.py   # web_search tool
 │   │   ├── fetch_content.py # fetch_content tool
@@ -356,7 +357,8 @@ web-mcp/
 │   └── entrypoint.sh      # Container entrypoint
 ├── Dockerfile             # Multi-stage Docker build
 ├── pyproject.toml         # Python project config
-└── requirements.txt       # Dependencies
+├── requirements.txt       # Runtime dependencies
+└── requirements-dev.txt   # Test/lint/type dependencies
 ```
 
 ## Troubleshooting

@@ -96,7 +96,7 @@ class TestGetSuggestions:
 
     @pytest.mark.asyncio
     async def test_get_suggestions_uses_singleton(self):
-        with patch("web_mcp.tools.suggestions._get_provider") as mock_get_provider:
+        with patch("web_mcp.tools.suggestions.get_search_provider") as mock_get_provider:
             mock_instance = AsyncMock()
             mock_instance.get_suggestions.return_value = ["suggestion"]
             mock_get_provider.return_value = mock_instance
@@ -104,6 +104,12 @@ class TestGetSuggestions:
             result = await get_suggestions("test")
             assert isinstance(result, SuggestionsResult)
             assert result.suggestions == ["suggestion"]
+
+    @pytest.mark.asyncio
+    async def test_get_suggestions_rejects_empty_query(self):
+        result = await get_suggestions("   ")
+        assert result.suggestions == []
+        assert result.error == "query must be a non-empty string"
 
 
 class TestToolSchema:

@@ -1,3 +1,6 @@
+import asyncio
+import ipaddress
+import socket
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
@@ -5,9 +8,11 @@ from urllib.parse import urlparse
 import httpx
 import trafilatura
 
+from web_mcp.config import settings
 from web_mcp.utils.logger import get_logger
 
 logger = get_logger("web_mcp")
+IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
 @dataclass
@@ -45,15 +50,26 @@ class ContentExtractor:
         "Chrome/120.0.0.0 Safari/537.36"
     )
 
-    def __init__(self, timeout: int = DEFAULT_TIMEOUT, max_length: int = DEFAULT_MAX_LENGTH):
+    def __init__(
+        self,
+        timeout: int = DEFAULT_TIMEOUT,
+        max_length: int = DEFAULT_MAX_LENGTH,
+        allow_private_network: bool | None = None,
+    ):
         self.timeout = timeout
         self.max_length = max_length
+        self.allow_private_network = (
+            settings.FETCH_ALLOW_PRIVATE_NETWORK
+            if allow_private_network is None
+            else allow_private_network
+        )
 
     async def extract(self, url: str, max_length: int | None = None) -> ExtractedContent:
         max_len = max_length if max_length is not None else self.max_length
         domain = self._extract_domain(url)
 
         try:
+            await self._validate_target(url)
             html, fetch_meta = await self.fetch(url)
             content_type = fetch_meta.get("content_type", "")
 
@@ -193,3 +209,62 @@ class ContentExtractor:
             return parsed.netloc or ""
         except Exception:
             return ""
+
+    async def _validate_target(self, url: str) -> None:
+        parsed = urlparse(url)
+        scheme = parsed.scheme.lower()
+        if scheme not in {"http", "https"}:
+            raise ValueError("Only http and https URLs are allowed")
+
+        hostname = parsed.hostname
+        if not hostname:
+            raise ValueError("URL must include a valid hostname")
+
+        if self.allow_private_network:
+            return
+
+        lowered_host = hostname.strip().lower()
+        if lowered_host == "localhost" or lowered_host.endswith(".local"):
+            raise ValueError("Blocked URL target: local network addresses are not allowed")
+
+        direct_ip = self._parse_ip(hostname)
+        if direct_ip is not None and self._is_blocked_ip(direct_ip):
+            raise ValueError("Blocked URL target: private network addresses are not allowed")
+
+        resolved_ips = await self._resolve_host_ips(lowered_host, parsed.port, scheme)
+        if not resolved_ips:
+            raise ValueError(f"Could not resolve hostname: {lowered_host}")
+
+        for raw_ip in resolved_ips:
+            resolved_ip = self._parse_ip(raw_ip)
+            if resolved_ip is not None and self._is_blocked_ip(resolved_ip):
+                raise ValueError("Blocked URL target: private network addresses are not allowed")
+
+    async def _resolve_host_ips(self, hostname: str, port: int | None, scheme: str) -> set[str]:
+        resolved_port = port or (443 if scheme == "https" else 80)
+        loop = asyncio.get_running_loop()
+        try:
+            infos = await loop.getaddrinfo(
+                hostname,
+                resolved_port,
+                family=socket.AF_UNSPEC,
+                type=socket.SOCK_STREAM,
+            )
+        except (socket.gaierror, OSError) as e:
+            raise ValueError(f"Could not resolve hostname: {hostname}") from e
+
+        ips: set[str] = set()
+        for info in infos:
+            sockaddr = info[4]
+            if sockaddr:
+                ips.add(sockaddr[0])
+        return ips
+
+    def _is_blocked_ip(self, ip: IPAddress) -> bool:
+        return not ip.is_global
+
+    def _parse_ip(self, value: str) -> IPAddress | None:
+        try:
+            return ipaddress.ip_address(value)
+        except ValueError:
+            return None

@@ -4,6 +4,8 @@ import pytest
 
 from web_mcp.search.base import SearchResponse, SearchResult
 from web_mcp.tools.web_search import (
+    MAX_LIMIT,
+    MIN_LIMIT,
     TOOL_SCHEMA,
     WebSearchResult,
     web_search,
@@ -109,7 +111,7 @@ class TestWebSearch:
             query="test",
         )
 
-        with patch("web_mcp.tools.web_search._get_provider") as mock_get_provider:
+        with patch("web_mcp.tools.web_search.get_search_provider") as mock_get_provider:
             mock_provider = AsyncMock()
             mock_provider.search.return_value = mock_response
             mock_get_provider.return_value = mock_provider
@@ -127,7 +129,7 @@ class TestWebSearch:
             query="test",
         )
 
-        with patch("web_mcp.tools.web_search._get_provider") as mock_get_provider:
+        with patch("web_mcp.tools.web_search.get_search_provider") as mock_get_provider:
             mock_provider = AsyncMock()
             mock_provider.search.return_value = mock_response
             mock_get_provider.return_value = mock_provider
@@ -137,7 +139,7 @@ class TestWebSearch:
 
     @pytest.mark.asyncio
     async def test_web_search_error_handling(self):
-        with patch("web_mcp.tools.web_search._get_provider") as mock_get_provider:
+        with patch("web_mcp.tools.web_search.get_search_provider") as mock_get_provider:
             mock_provider = AsyncMock()
             mock_provider.search.side_effect = Exception("Search failed")
             mock_get_provider.return_value = mock_provider
@@ -146,6 +148,24 @@ class TestWebSearch:
             assert result.provider == "error"
             assert result.results == []
             assert result.error == "Search failed"
+
+    @pytest.mark.asyncio
+    async def test_web_search_rejects_empty_query(self):
+        result = await web_search("   ")
+        assert result.provider == "error"
+        assert result.error == "query must be a non-empty string"
+
+    @pytest.mark.asyncio
+    async def test_web_search_rejects_non_integer_limit(self):
+        result = await web_search("python", limit=1.5)
+        assert result.provider == "error"
+        assert "limit must be an integer" in result.error
+
+    @pytest.mark.asyncio
+    async def test_web_search_rejects_invalid_category(self):
+        result = await web_search("python", category="invalid")
+        assert result.provider == "error"
+        assert "category must be one of:" in result.error
 
 
 class TestToolSchema:
@@ -161,3 +181,9 @@ class TestToolSchema:
         assert "enum" in category_prop
         assert "general" in category_prop["enum"]
         assert "news" in category_prop["enum"]
+
+    def test_limit_schema_is_integer_with_bounds(self):
+        limit_prop = TOOL_SCHEMA["inputSchema"]["properties"]["limit"]
+        assert limit_prop["type"] == "integer"
+        assert limit_prop["minimum"] == MIN_LIMIT
+        assert limit_prop["maximum"] == MAX_LIMIT

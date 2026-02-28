@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -79,7 +79,29 @@ class TestGoogleProvider:
             assert response.query == "test query"
 
     @pytest.mark.asyncio
-    async def test_get_suggestions_returns_empty(self):
+    async def test_get_suggestions_returns_suggestions(self):
         provider = GoogleProvider()
-        suggestions = await provider.get_suggestions("test query")
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = ["test query", ["test query a", "test query b"]]
+
+        with patch("httpx.AsyncClient.get", AsyncMock(return_value=mock_response)):
+            suggestions = await provider.get_suggestions("test query")
+
+        assert suggestions == ["test query a", "test query b"]
+
+    @pytest.mark.asyncio
+    async def test_get_suggestions_returns_empty_for_invalid_payload(self):
+        provider = GoogleProvider()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"unexpected": "shape"}
+
+        with patch("httpx.AsyncClient.get", AsyncMock(return_value=mock_response)):
+            suggestions = await provider.get_suggestions("test query")
+
         assert suggestions == []

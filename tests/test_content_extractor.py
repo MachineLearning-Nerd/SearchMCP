@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -79,7 +79,7 @@ class TestContentExtractor:
 
     @pytest.mark.asyncio
     async def test_extract_connection_error(self):
-        extractor = ContentExtractor()
+        extractor = ContentExtractor(allow_private_network=True)
 
         with patch.object(extractor, "fetch", side_effect=Exception("Connection failed")):
             result = await extractor.extract("https://nonexistent.invalid")
@@ -88,7 +88,7 @@ class TestContentExtractor:
 
     @pytest.mark.asyncio
     async def test_extract_successful(self):
-        extractor = ContentExtractor()
+        extractor = ContentExtractor(allow_private_network=True)
 
         mock_html = "<html><head><title>Test</title></head><body><p>Content</p></body></html>"
         mock_meta = {"content_type": "text/html"}
@@ -100,3 +100,51 @@ class TestContentExtractor:
                 result = await extractor.extract("https://example.com")
                 assert result.error == ""
                 assert result.source == "example.com"
+
+    @pytest.mark.asyncio
+    async def test_validate_target_blocks_non_http_scheme(self):
+        extractor = ContentExtractor(allow_private_network=False)
+        with pytest.raises(ValueError, match="Only http and https URLs are allowed"):
+            await extractor._validate_target("file:///tmp/test.txt")
+
+    @pytest.mark.asyncio
+    async def test_validate_target_blocks_localhost(self):
+        extractor = ContentExtractor(allow_private_network=False)
+        with pytest.raises(ValueError, match="local network addresses"):
+            await extractor._validate_target("http://localhost/test")
+
+    @pytest.mark.asyncio
+    async def test_validate_target_blocks_private_ip_literal(self):
+        extractor = ContentExtractor(allow_private_network=False)
+        with pytest.raises(ValueError, match="private network addresses"):
+            await extractor._validate_target("http://10.0.0.5/internal")
+
+    @pytest.mark.asyncio
+    async def test_validate_target_blocks_private_dns_resolution(self):
+        extractor = ContentExtractor(allow_private_network=False)
+        with patch.object(extractor, "_resolve_host_ips", AsyncMock(return_value={"127.0.0.1"})):
+            with pytest.raises(ValueError, match="private network addresses"):
+                await extractor._validate_target("http://example.com/test")
+
+    @pytest.mark.asyncio
+    async def test_validate_target_allows_public_dns_resolution(self):
+        extractor = ContentExtractor(allow_private_network=False)
+        with patch.object(
+            extractor,
+            "_resolve_host_ips",
+            AsyncMock(return_value={"93.184.216.34"}),
+        ):
+            await extractor._validate_target("https://example.com")
+
+    @pytest.mark.asyncio
+    async def test_validate_target_allows_private_when_override_enabled(self):
+        extractor = ContentExtractor(allow_private_network=True)
+        await extractor._validate_target("http://localhost/test")
+
+    @pytest.mark.asyncio
+    async def test_extract_blocks_private_network_urls(self):
+        extractor = ContentExtractor(allow_private_network=False)
+        with patch.object(extractor, "fetch", AsyncMock()) as fetch_mock:
+            result = await extractor.extract("http://localhost/internal")
+            assert "Blocked URL target" in result.error
+            fetch_mock.assert_not_awaited()

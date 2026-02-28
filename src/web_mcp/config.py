@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     RATE_LIMIT_REQUESTS: int = Field(default=30, description="Max requests per period")
     RATE_LIMIT_PERIOD: int = Field(default=60, description="Rate limit period in seconds")
     MAX_CONTENT_LENGTH: int = Field(default=10000, description="Max characters in fetched content")
+    FETCH_ALLOW_PRIVATE_NETWORK: bool = Field(
+        default=False,
+        description="Allow fetching private/localhost network targets",
+    )
     DEFAULT_SEARCH_LIMIT: int = Field(default=5, description="Default number of search results")
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
     JSON_LOGS: bool = Field(default=False, description="Output logs in JSON format")

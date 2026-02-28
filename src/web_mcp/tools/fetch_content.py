@@ -6,6 +6,9 @@ from web_mcp.utils.content_extractor import ContentExtractor, ExtractedContent
 from web_mcp.utils.logger import get_logger
 
 logger = get_logger("web_mcp")
+MIN_CONTENT_LENGTH = 500
+MAX_CONTENT_LENGTH = 20000
+DEFAULT_CONTENT_LENGTH = min(MAX_CONTENT_LENGTH, max(MIN_CONTENT_LENGTH, settings.MAX_CONTENT_LENGTH))
 
 
 @dataclass
@@ -67,7 +70,7 @@ class FetchContentResult:
         ]
 
 
-async def fetch_content(url: str, max_length: int | None = None) -> FetchContentResult:
+async def fetch_content(url: str, max_length: int | float | None = None) -> FetchContentResult:
     """
     Fetch and extract content from a URL.
 
@@ -78,22 +81,28 @@ async def fetch_content(url: str, max_length: int | None = None) -> FetchContent
     Returns:
         FetchContentResult with extracted content
     """
-    if max_length is None:
-        max_length = settings.MAX_CONTENT_LENGTH
-
-    logger.info(f"Fetching content from {url}", extra={"url": url, "max_length": max_length})
-
     try:
+        normalized_url = _normalize_url(url)
+        normalized_max_length = _normalize_max_length(max_length)
+
+        logger.info(
+            f"Fetching content from {normalized_url}",
+            extra={"url": normalized_url, "max_length": normalized_max_length},
+        )
+
         extractor = ContentExtractor()
-        extracted: ExtractedContent = await extractor.extract(url, max_length=max_length)
+        extracted: ExtractedContent = await extractor.extract(
+            normalized_url,
+            max_length=normalized_max_length,
+        )
 
         if extracted.error:
             logger.warning(
                 f"Content extraction failed: {extracted.error}",
-                extra={"url": url, "error": extracted.error},
+                extra={"url": normalized_url, "error": extracted.error},
             )
             return FetchContentResult(
-                url=url,
+                url=normalized_url,
                 title="",
                 content="",
                 error=extracted.error,
@@ -102,7 +111,7 @@ async def fetch_content(url: str, max_length: int | None = None) -> FetchContent
         logger.info(
             "Content extracted successfully",
             extra={
-                "url": url,
+                "url": normalized_url,
                 "title": extracted.title,
                 "content_length": len(extracted.content),
                 "truncated": extracted.truncated,
@@ -110,7 +119,7 @@ async def fetch_content(url: str, max_length: int | None = None) -> FetchContent
         )
 
         return FetchContentResult(
-            url=url,
+            url=normalized_url,
             title=extracted.title,
             content=extracted.content,
             description=extracted.description or "",
@@ -123,11 +132,44 @@ async def fetch_content(url: str, max_length: int | None = None) -> FetchContent
     except Exception as e:
         logger.error(f"Failed to fetch content: {e}", extra={"url": url, "error": str(e)})
         return FetchContentResult(
-            url=url,
+            url=normalized_url if "normalized_url" in locals() else url,
             title="",
             content="",
             error=str(e),
         )
+
+
+def _normalize_url(url: str) -> str:
+    if not isinstance(url, str):
+        raise ValueError("url must be a non-empty string")
+    normalized = url.strip()
+    if not normalized:
+        raise ValueError("url must be a non-empty string")
+    return normalized
+
+
+def _normalize_max_length(max_length: int | float | None) -> int:
+    if max_length is None:
+        return DEFAULT_CONTENT_LENGTH
+
+    if isinstance(max_length, bool) or not isinstance(max_length, (int, float)):
+        raise ValueError(
+            f"max_length must be an integer between {MIN_CONTENT_LENGTH} and {MAX_CONTENT_LENGTH}"
+        )
+
+    if isinstance(max_length, float):
+        if not max_length.is_integer():
+            raise ValueError(
+                f"max_length must be an integer between {MIN_CONTENT_LENGTH} and {MAX_CONTENT_LENGTH}"
+            )
+        max_length = int(max_length)
+
+    resolved = int(max_length)
+    if resolved < MIN_CONTENT_LENGTH or resolved > MAX_CONTENT_LENGTH:
+        raise ValueError(
+            f"max_length must be between {MIN_CONTENT_LENGTH} and {MAX_CONTENT_LENGTH}"
+        )
+    return resolved
 
 
 TOOL_SCHEMA = {
@@ -141,8 +183,11 @@ TOOL_SCHEMA = {
                 "description": "The URL to fetch content from",
             },
             "max_length": {
-                "type": "number",
+                "type": "integer",
                 "description": "Maximum content length in characters (default: 10000)",
+                "minimum": MIN_CONTENT_LENGTH,
+                "maximum": MAX_CONTENT_LENGTH,
+                "default": DEFAULT_CONTENT_LENGTH,
             },
         },
         "required": ["url"],

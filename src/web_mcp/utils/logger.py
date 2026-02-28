@@ -85,7 +85,8 @@ def setup_logging(
     if logger.handlers:
         logger.handlers.clear()
 
-    handler = logging.StreamHandler(sys.stdout)
+    # MCP stdio protocol uses stdout for JSON-RPC frames. Keep logs on stderr.
+    handler = logging.StreamHandler(sys.stderr)
     handler.setLevel(log_level)
 
     formatter = StructuredFormatter(json_format=json_format)

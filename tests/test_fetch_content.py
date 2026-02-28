@@ -2,7 +2,13 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from web_mcp.tools.fetch_content import TOOL_SCHEMA, FetchContentResult, fetch_content
+from web_mcp.tools.fetch_content import (
+    MAX_CONTENT_LENGTH,
+    MIN_CONTENT_LENGTH,
+    TOOL_SCHEMA,
+    FetchContentResult,
+    fetch_content,
+)
 
 
 class TestFetchContentResult:
@@ -107,6 +113,16 @@ class TestFetchContent:
             result = await fetch_content("https://example.com")
             assert result.error == "Failed to extract"
 
+    @pytest.mark.asyncio
+    async def test_fetch_content_rejects_empty_url(self):
+        result = await fetch_content("   ")
+        assert result.error == "url must be a non-empty string"
+
+    @pytest.mark.asyncio
+    async def test_fetch_content_rejects_non_integer_max_length(self):
+        result = await fetch_content("https://example.com", max_length=1000.5)
+        assert "max_length must be an integer" in result.error
+
 
 class TestToolSchema:
     def test_tool_schema_has_required_fields(self):
@@ -114,3 +130,9 @@ class TestToolSchema:
         assert "url" in TOOL_SCHEMA["inputSchema"]["properties"]
         assert "max_length" in TOOL_SCHEMA["inputSchema"]["properties"]
         assert "url" in TOOL_SCHEMA["inputSchema"]["required"]
+
+    def test_max_length_schema_is_integer_with_bounds(self):
+        max_length_prop = TOOL_SCHEMA["inputSchema"]["properties"]["max_length"]
+        assert max_length_prop["type"] == "integer"
+        assert max_length_prop["minimum"] == MIN_CONTENT_LENGTH
+        assert max_length_prop["maximum"] == MAX_CONTENT_LENGTH

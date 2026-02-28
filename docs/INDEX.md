@@ -95,4 +95,5 @@ See [.env.example](../.env.example) for all configuration options.
 Key settings:
 - `SEARXNG_URL` - SearxNG server URL
 - `FALLBACK_ENABLED` - Enable Google fallback
+- `FETCH_ALLOW_PRIVATE_NETWORK` - Allow private/localhost fetch targets (disabled by default)
 - `LOG_LEVEL` - Logging verbosity
