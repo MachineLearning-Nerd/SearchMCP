@@ -340,24 +340,26 @@ web-mcp/
 │   ├── config.py           # Configuration management
 │   ├── server.py           # MCP server entry point
 │   ├── search/
-│   │   ├── base.py         # Abstract search provider
+│   │   ├── base.py         # SearchResult, SearchResponse, SearchProvider ABC
 │   │   ├── searxng.py      # SearxNG provider
 │   │   ├── google.py       # Google scraping fallback
-│   │   ├── fallback.py     # Fallback logic
-│   │   └── provider_registry.py # Shared provider lifecycle
+│   │   ├── fallback.py     # Fallback orchestration + quality gate
+│   │   ├── relevance.py    # Scoring, ranking, dedup, snippet cleaning
+│   │   └── provider_registry.py # Shared provider singleton
 │   ├── tools/
 │   │   ├── web_search.py   # web_search tool
 │   │   ├── fetch_content.py # fetch_content tool
 │   │   └── suggestions.py  # get_suggestions tool
 │   └── utils/
 │       ├── logger.py       # Structured logging
-│       ├── rate_limiter.py # Rate limiting
-│       └── content_extractor.py # Content extraction
+│       ├── rate_limiter.py  # Rate limiting
+│       ├── content_extractor.py # HTML-to-markdown extraction
+│       └── validation.py   # Shared input validation
 ├── tests/                  # Test suite
 ├── docker/                 # Docker configuration
 │   ├── searxng/           # SearxNG settings
 │   └── entrypoint.sh      # Container entrypoint
-├── Dockerfile             # Multi-stage Docker build
+├── Dockerfile             # Single-container Docker build
 ├── pyproject.toml         # Python project config
 ├── requirements.txt       # Runtime dependencies
 └── requirements-dev.txt   # Test/lint/type dependencies
