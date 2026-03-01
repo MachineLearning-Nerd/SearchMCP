@@ -10,6 +10,9 @@ from typing import Any
 class StructuredFormatter(logging.Formatter):
     """Custom formatter that outputs logs in a structured format."""
 
+    # Standard LogRecord attributes that Python's logging module adds automatically.
+    # We exclude these so that only our custom "extra" fields (like query, url,
+    # results_count) appear in the structured log output.
     _EXCLUDED_KEYS = frozenset({
         "name",
         "msg",

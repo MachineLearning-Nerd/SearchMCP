@@ -40,10 +40,17 @@ class SearchResponse:
         }
 
 
+# Search categories supported by SearxNG. Used for input validation in both
+# the web_search tool and the SearxNG provider.
 VALID_CATEGORIES: set[str] = {"general", "images", "videos", "news", "science", "files"}
 
 
 class SearchProvider(ABC):
+    """Base class that all search providers must implement.
+
+    Concrete implementations: SearxNGProvider, GoogleProvider, FallbackSearchProvider.
+    Each provider must define how to search and how to get suggestions.
+    """
     @property
     @abstractmethod
     def name(self) -> str:

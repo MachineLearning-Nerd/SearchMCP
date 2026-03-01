@@ -11,6 +11,8 @@ from web_mcp.utils.logger import get_logger
 
 logger = get_logger("web_mcp")
 
+# Rotate user-agent strings to reduce the chance of Google blocking requests.
+# This is a fallback provider — SearxNG is the primary search backend.
 USER_AGENTS: Final[list[str]] = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -64,6 +66,7 @@ class GoogleProvider(SearchProvider):
         )
 
     async def _scrape_google(self, query: str, limit: int) -> list[SearchResult]:
+        # Request 2 extra results because some may lack valid URLs and get filtered out
         params = {"q": query, "num": str(limit + 2)}
 
         try:
@@ -128,11 +131,16 @@ class GoogleProvider(SearchProvider):
                 return None
 
             description = ""
+            # Google uses different CSS classes for description snippets across
+            # page variations. We try multiple selectors and take the first match.
+            # WARNING: These selectors are fragile — Google changes its HTML
+            # structure without notice. If descriptions stop appearing, these
+            # selectors likely need updating.
             desc_selectors = [
-                "div[data-sncf]",
-                "div.VwiC3b",
-                "span.aCOpRe",
-                "div.IsZvec",
+                "div[data-sncf]",   # Modern snippet container
+                "div.VwiC3b",       # Common snippet class
+                "span.aCOpRe",      # Older snippet span
+                "div.IsZvec",       # Alternative snippet wrapper
             ]
             for selector in desc_selectors:
                 desc_elem = container.select_one(selector)

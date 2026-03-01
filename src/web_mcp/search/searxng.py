@@ -25,6 +25,11 @@ class SearxNGProvider(SearchProvider):
         return bool(self._base_url)
 
     def _get_client(self) -> httpx.AsyncClient:
+        """Return a reusable HTTP client (creates one if needed).
+
+        Reusing the client across requests enables HTTP connection pooling,
+        which is faster than creating a new connection for every search.
+        """
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(timeout=self._timeout)
         return self._client
@@ -54,12 +59,23 @@ class SearxNGProvider(SearchProvider):
 
     @staticmethod
     def _parse_suggestions(data: dict[str, Any]) -> list[str]:
+        """Extract query suggestions from a SearxNG JSON response.
+
+        SearxNG may return suggestions under "suggestions" or "corrections" key.
+        """
         suggestions = data.get("suggestions", []) or data.get("corrections", [])
         if isinstance(suggestions, list):
             return [str(s) for s in suggestions if s]
         return []
 
     def _log_request_error(self, e: Exception, url: str, context: str) -> None:
+        """Log a SearxNG request error with appropriate detail based on exception type.
+
+        Args:
+            e: The caught exception
+            url: The SearxNG URL that was called
+            context: Human-readable label like "search" or "suggestions"
+        """
         if isinstance(e, httpx.TimeoutException):
             self._logger.error(
                 f"SearxNG {context} timed out: {e}",
@@ -108,6 +124,12 @@ class SearxNGProvider(SearchProvider):
         )
 
     def _resolve_candidate_limit(self, limit: int) -> int:
+        """Calculate how many candidates to fetch from SearxNG before reranking.
+
+        We fetch more results than the user asked for (e.g., 5x) so our
+        relevance ranker in relevance.py has a larger pool to pick the best
+        results from. The final output is trimmed to the user's requested limit.
+        """
         if limit <= 0:
             return settings.SEARCH_MAX_CANDIDATES
 

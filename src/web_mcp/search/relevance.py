@@ -10,7 +10,9 @@ from web_mcp.search.base import SearchResult
 QUERY_INTENT_SECURITY = "security"
 QUERY_INTENT_GENERAL = "general"
 
+# Matches CVE identifiers like "CVE-2024-1234" (case-insensitive, word boundary)
 _CVE_PATTERN = re.compile(r"\bCVE-\d{4}-\d{4,}\b", flags=re.IGNORECASE)
+# Extracts alphanumeric tokens for query-to-result matching
 _TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+")
 _SECURITY_KEYWORDS = {
     "cve",
@@ -25,6 +27,7 @@ _SECURITY_KEYWORDS = {
     "mitigation",
 }
 
+# URLs ending in these suffixes are usually raw data files, not useful search results
 _LOW_SIGNAL_SUFFIXES = (
     ".txt",
     ".csv",
@@ -43,6 +46,9 @@ _LOW_SIGNAL_TOKENS = {
     "tokenizer",
 }
 
+# Scoring boosts for trusted security sources. Higher = more authoritative.
+# NVD (8.0) and CVE.org (7.0) are the primary CVE databases; others are
+# well-known distro/vendor advisory sources. Weights are empirically tuned.
 _SECURITY_DOMAIN_BOOSTS: dict[str, float] = {
     "nvd.nist.gov": 8.0,
     "www.cve.org": 7.0,
@@ -54,6 +60,8 @@ _SECURITY_DOMAIN_BOOSTS: dict[str, float] = {
     "cvedetails.com": 3.0,
 }
 
+# Scoring boosts for high-quality general programming sources.
+# Official docs (4.0) rank above community sites (2.0-3.5).
 _GENERAL_DOMAIN_BOOSTS: dict[str, float] = {
     "docs.python.org": 4.0,
     "stackoverflow.com": 3.5,
@@ -63,6 +71,8 @@ _GENERAL_DOMAIN_BOOSTS: dict[str, float] = {
     "en.wikipedia.org": 2.0,
 }
 
+# Common boilerplate phrases that leak into search snippets from page chrome.
+# These get stripped from descriptions to keep snippets clean and informative.
 _NAVIGATION_PHRASES = (
     "skip to navigation",
     "skip to main content",
@@ -87,11 +97,12 @@ _LANGUAGE_TOKENS = {
     "hindi",
 }
 
-_SEGMENT_SPLIT_RE = re.compile(r"\s*[•|·]\s*")
-_BULLET_NORMALIZE_RE = re.compile(r"\s+[•|·]\s+")
-_MULTI_SPACE_RE = re.compile(r"\s{2,}")
-_WORD_RE = re.compile(r"[^\W\d_]+", flags=re.UNICODE)
-_NAVIGATION_PHRASES_RE = re.compile(
+# Pre-compiled regex patterns for snippet cleaning (compiled once at import time).
+_SEGMENT_SPLIT_RE = re.compile(r"\s*[•|·]\s*")       # Split on bullet separators: "A • B • C"
+_BULLET_NORMALIZE_RE = re.compile(r"\s+[•|·]\s+")     # Normalize inconsistent bullet spacing
+_MULTI_SPACE_RE = re.compile(r"\s{2,}")                # Collapse multiple spaces to one
+_WORD_RE = re.compile(r"[^\W\d_]+", flags=re.UNICODE)  # Extract alphabetic words (no digits/underscores)
+_NAVIGATION_PHRASES_RE = re.compile(                    # Combined pattern to strip all nav phrases at once
     "|".join(re.escape(phrase) for phrase in _NAVIGATION_PHRASES),
     flags=re.IGNORECASE,
 )
@@ -208,6 +219,12 @@ def is_low_quality(outcome: RankingOutcome, min_quality_score: float) -> bool:
 
 
 def clean_search_snippet(snippet: str) -> str:
+    """Remove navigation boilerplate and noise from a search result description.
+
+    Search engines often include page chrome like "Skip to content • English •
+    Francais" in their snippets. This function strips that noise so the user
+    sees only the actual page content.
+    """
     cleaned = snippet.replace("\xa0", " ")
     cleaned = " ".join(cleaned.split())
     if not cleaned:
@@ -244,6 +261,17 @@ def _score_result(
     cve_ids: set[str],
     intent: str,
 ) -> float:
+    """Score a single search result for relevance to the query.
+
+    Scoring logic (higher = better):
+      - Title match (+1.8/token): Titles are the strongest relevance signal
+      - URL match  (+1.0/token): Keywords in URLs indicate topic pages
+      - Description match (+0.5/token): Weaker signal, often noisy snippets
+      - CVE ID match (+10.0): Exact CVE match is an extremely strong signal
+      - Domain boost (varies): Trusted sources get bonus points (see _*_DOMAIN_BOOSTS)
+      - Low-signal penalty (-6.0): Demotes data files like .csv, .txt, wordlists
+      - Missing description (-0.25): Small penalty for results without a snippet
+    """
     title = result.title.lower()
     description = result.description.lower()
     url = result.url.lower()
@@ -277,6 +305,12 @@ def _score_result(
 
 
 def _quality_from_scores(scores: list[float]) -> float:
+    """Average the top 3 scores to gauge overall result quality.
+
+    Only the top 3 matter because even one or two strong results make a useful
+    response. This score is compared against SEARCH_MIN_QUALITY_SCORE to decide
+    whether to trigger the Google fallback for security queries.
+    """
     if not scores:
         return 0.0
 

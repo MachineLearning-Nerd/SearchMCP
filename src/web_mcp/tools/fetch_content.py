@@ -7,6 +7,8 @@ from web_mcp.utils.logger import get_logger
 from web_mcp.utils.validation import normalize_int_param
 
 logger = get_logger("web_mcp")
+# Singleton: reuse one extractor across requests to avoid recreating it per call.
+# Initialized lazily on first use inside fetch_content().
 _content_extractor: ContentExtractor | None = None
 MIN_CONTENT_LENGTH = 500
 MAX_CONTENT_LENGTH = 20000
