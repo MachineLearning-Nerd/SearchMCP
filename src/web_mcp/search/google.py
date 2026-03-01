@@ -9,7 +9,7 @@ from web_mcp.search.base import SearchProvider, SearchResponse, SearchResult
 from web_mcp.search.relevance import clean_search_snippet
 from web_mcp.utils.logger import get_logger
 
-logger = get_logger()
+logger = get_logger("web_mcp")
 
 USER_AGENTS: Final[list[str]] = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",

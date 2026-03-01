@@ -74,7 +74,7 @@ class TestFetchContentResult:
 class TestFetchContent:
     @pytest.mark.asyncio
     async def test_fetch_content_success(self):
-        from web_mcp.utils.content_extractor import ExtractedContent
+        from web_mcp.utils.content_extractor import ContentExtractor, ExtractedContent
 
         mock_extracted = ExtractedContent(
             url="https://example.com",
@@ -87,17 +87,16 @@ class TestFetchContent:
             truncated=False,
         )
 
-        with patch("web_mcp.tools.fetch_content.ContentExtractor") as mock_extractor:
-            instance = mock_extractor.return_value
-            instance.extract = AsyncMock(return_value=mock_extracted)
-
-            result = await fetch_content("https://example.com")
-            assert result.error == ""
-            assert result.title == "Test Title"
+        extractor = ContentExtractor()
+        with patch.object(extractor, "extract", new=AsyncMock(return_value=mock_extracted)):
+            with patch("web_mcp.tools.fetch_content._content_extractor", extractor):
+                result = await fetch_content("https://example.com")
+                assert result.error == ""
+                assert result.title == "Test Title"
 
     @pytest.mark.asyncio
     async def test_fetch_content_error(self):
-        from web_mcp.utils.content_extractor import ExtractedContent
+        from web_mcp.utils.content_extractor import ContentExtractor, ExtractedContent
 
         mock_extracted = ExtractedContent(
             url="https://example.com",
@@ -106,12 +105,11 @@ class TestFetchContent:
             error="Failed to extract",
         )
 
-        with patch("web_mcp.tools.fetch_content.ContentExtractor") as mock_extractor:
-            instance = mock_extractor.return_value
-            instance.extract = AsyncMock(return_value=mock_extracted)
-
-            result = await fetch_content("https://example.com")
-            assert result.error == "Failed to extract"
+        extractor = ContentExtractor()
+        with patch.object(extractor, "extract", new=AsyncMock(return_value=mock_extracted)):
+            with patch("web_mcp.tools.fetch_content._content_extractor", extractor):
+                result = await fetch_content("https://example.com")
+                assert result.error == "Failed to extract"
 
     @pytest.mark.asyncio
     async def test_fetch_content_rejects_empty_url(self):

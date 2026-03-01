@@ -3,14 +3,12 @@ from typing import Any
 import httpx
 
 from web_mcp.config import settings
-from web_mcp.search.base import SearchProvider, SearchResponse, SearchResult
+from web_mcp.search.base import VALID_CATEGORIES, SearchProvider, SearchResponse, SearchResult
 from web_mcp.search.relevance import clean_search_snippet, select_engines_for_query
 from web_mcp.utils.logger import get_logger
 
 
 class SearxNGProvider(SearchProvider):
-    VALID_CATEGORIES: set[str] = {"general", "images", "videos", "news", "science", "files"}
-
     def __init__(self, base_url: str | None = None, timeout: int | None = None):
         resolved_base_url = settings.SEARXNG_URL if base_url is None else base_url
         self._base_url = resolved_base_url.rstrip("/")
@@ -37,10 +35,10 @@ class SearxNGProvider(SearchProvider):
             self._client = None
 
     def _validate_category(self, category: str) -> str:
-        if category not in self.VALID_CATEGORIES:
+        if category not in VALID_CATEGORIES:
             self._logger.warning(
                 f"Invalid category '{category}', falling back to 'general'",
-                extra={"category": category, "valid_categories": list(self.VALID_CATEGORIES)},
+                extra={"category": category, "valid_categories": list(VALID_CATEGORIES)},
             )
             return "general"
         return category
@@ -54,14 +52,48 @@ class SearxNGProvider(SearchProvider):
             source=item.get("engine", ""),
         )
 
+    @staticmethod
+    def _parse_suggestions(data: dict[str, Any]) -> list[str]:
+        suggestions = data.get("suggestions", []) or data.get("corrections", [])
+        if isinstance(suggestions, list):
+            return [str(s) for s in suggestions if s]
+        return []
+
+    def _log_request_error(self, e: Exception, url: str, context: str) -> None:
+        if isinstance(e, httpx.TimeoutException):
+            self._logger.error(
+                f"SearxNG {context} timed out: {e}",
+                extra={"url": url, "timeout": self._timeout, "error": str(e)},
+            )
+        elif isinstance(e, httpx.ConnectError):
+            self._logger.error(
+                f"Failed to connect to SearxNG: {e}",
+                extra={"url": url, "error": str(e)},
+            )
+        elif isinstance(e, httpx.HTTPStatusError):
+            self._logger.error(
+                f"SearxNG HTTP error: {e.response.status_code}",
+                extra={"url": url, "status_code": e.response.status_code, "error": str(e)},
+            )
+        elif isinstance(e, httpx.HTTPError):
+            self._logger.error(
+                f"SearxNG HTTP error: {e}",
+                extra={"url": url, "error": str(e)},
+            )
+        elif isinstance(e, (KeyError, TypeError, ValueError)):
+            self._logger.error(
+                f"Failed to parse SearxNG {context}: {e}",
+                extra={"error": str(e)},
+            )
+        else:
+            self._logger.error(
+                f"Unexpected SearxNG {context} error: {e}",
+                extra={"url": url, "error": str(e)},
+            )
+
     def _parse_response(self, data: dict[str, Any], query: str, limit: int = 0) -> SearchResponse:
         results_data = data.get("results", [])
-        suggestions = data.get("suggestions", []) or data.get("corrections", [])
-
-        if isinstance(suggestions, list):
-            suggestions = [str(s) for s in suggestions if s]
-        else:
-            suggestions = []
+        suggestions = self._parse_suggestions(data)
 
         results = [self._parse_result(item) for item in results_data if item.get("url")]
 
@@ -153,71 +185,8 @@ class SearxNGProvider(SearchProvider):
 
             return search_response
 
-        except httpx.TimeoutException as e:
-            self._logger.error(
-                f"SearxNG request timed out: {e}",
-                extra={"url": url, "timeout": self._timeout, "error": str(e)},
-            )
-            return SearchResponse(
-                results=[],
-                suggestions=[],
-                provider=self.name,
-                query=query,
-            )
-
-        except httpx.ConnectError as e:
-            self._logger.error(
-                f"Failed to connect to SearxNG: {e}",
-                extra={"url": url, "error": str(e)},
-            )
-            return SearchResponse(
-                results=[],
-                suggestions=[],
-                provider=self.name,
-                query=query,
-            )
-
-        except httpx.HTTPStatusError as e:
-            self._logger.error(
-                f"SearxNG HTTP error: {e.response.status_code}",
-                extra={"url": url, "status_code": e.response.status_code, "error": str(e)},
-            )
-            return SearchResponse(
-                results=[],
-                suggestions=[],
-                provider=self.name,
-                query=query,
-            )
-
-        except httpx.HTTPError as e:
-            self._logger.error(
-                f"SearxNG HTTP error: {e}",
-                extra={"url": url, "error": str(e)},
-            )
-            return SearchResponse(
-                results=[],
-                suggestions=[],
-                provider=self.name,
-                query=query,
-            )
-
-        except (KeyError, TypeError, ValueError) as e:
-            self._logger.error(
-                f"Failed to parse SearxNG response: {e}",
-                extra={"error": str(e)},
-            )
-            return SearchResponse(
-                results=[],
-                suggestions=[],
-                provider=self.name,
-                query=query,
-            )
-
         except Exception as e:
-            self._logger.error(
-                f"Unexpected SearxNG error: {e}",
-                extra={"url": url, "error": str(e)},
-            )
+            self._log_request_error(e, url, "search")
             return SearchResponse(
                 results=[],
                 suggestions=[],
@@ -249,12 +218,7 @@ class SearxNGProvider(SearchProvider):
                 )
                 return []
 
-            suggestions = data.get("suggestions", []) or data.get("corrections", [])
-
-            if isinstance(suggestions, list):
-                suggestions = [str(s) for s in suggestions if s]
-            else:
-                suggestions = []
+            suggestions = self._parse_suggestions(data)
 
             self._logger.debug(
                 f"SearxNG suggestions: {len(suggestions)} found",
@@ -263,44 +227,6 @@ class SearxNGProvider(SearchProvider):
 
             return suggestions
 
-        except httpx.TimeoutException as e:
-            self._logger.error(
-                f"SearxNG suggestions request timed out: {e}",
-                extra={"url": url, "timeout": self._timeout, "error": str(e)},
-            )
-            return []
-
-        except httpx.ConnectError as e:
-            self._logger.error(
-                f"Failed to connect to SearxNG: {e}",
-                extra={"url": url, "error": str(e)},
-            )
-            return []
-
-        except httpx.HTTPStatusError as e:
-            self._logger.error(
-                f"SearxNG HTTP error: {e.response.status_code}",
-                extra={"url": url, "status_code": e.response.status_code, "error": str(e)},
-            )
-            return []
-
-        except httpx.HTTPError as e:
-            self._logger.error(
-                f"SearxNG HTTP error: {e}",
-                extra={"url": url, "error": str(e)},
-            )
-            return []
-
-        except (KeyError, TypeError, ValueError) as e:
-            self._logger.error(
-                f"Failed to parse SearxNG suggestions: {e}",
-                extra={"error": str(e)},
-            )
-            return []
-
         except Exception as e:
-            self._logger.error(
-                f"Unexpected SearxNG suggestions error: {e}",
-                extra={"url": url, "error": str(e)},
-            )
+            self._log_request_error(e, url, "suggestions")
             return []

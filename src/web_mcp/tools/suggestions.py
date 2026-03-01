@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from typing import Any
 
-from web_mcp.search.fallback import FallbackSearchProvider
+from web_mcp.search.base import SearchProvider
 from web_mcp.search.provider_registry import get_search_provider
 from web_mcp.utils.logger import get_logger
+from web_mcp.utils.validation import normalize_query
 
 logger = get_logger("web_mcp")
 
@@ -53,17 +54,8 @@ class SuggestionsResult:
         ]
 
 
-def _normalize_query(query: str) -> str:
-    if not isinstance(query, str):
-        raise ValueError("query must be a non-empty string")
-    normalized = " ".join(query.split())
-    if not normalized:
-        raise ValueError("query must be a non-empty string")
-    return normalized
-
-
 async def get_suggestions(
-    query: str, provider: FallbackSearchProvider | None = None
+    query: str, provider: SearchProvider | None = None
 ) -> SuggestionsResult:
     """
     Get search suggestions for a query.
@@ -75,8 +67,9 @@ async def get_suggestions(
     Returns:
         SuggestionsResult with suggested queries
     """
+    normalized_query = query
     try:
-        normalized_query = _normalize_query(query)
+        normalized_query = normalize_query(query)
 
         logger.info(
             f"Getting suggestions for query: {normalized_query}",
@@ -104,7 +97,7 @@ async def get_suggestions(
             extra={"query": query, "error": str(e)},
         )
         return SuggestionsResult(
-            query=normalized_query if "normalized_query" in locals() else query,
+            query=normalized_query,
             suggestions=[],
             error=str(e),
         )

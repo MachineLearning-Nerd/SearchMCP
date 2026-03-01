@@ -10,6 +10,31 @@ from typing import Any
 class StructuredFormatter(logging.Formatter):
     """Custom formatter that outputs logs in a structured format."""
 
+    _EXCLUDED_KEYS = frozenset({
+        "name",
+        "msg",
+        "args",
+        "created",
+        "filename",
+        "funcName",
+        "levelname",
+        "levelno",
+        "lineno",
+        "module",
+        "msecs",
+        "pathname",
+        "process",
+        "processName",
+        "relativeCreated",
+        "stack_info",
+        "exc_info",
+        "exc_text",
+        "thread",
+        "threadName",
+        "message",
+        "asctime",
+    })
+
     def __init__(self, json_format: bool = False):
         self.json_format = json_format
         super().__init__()
@@ -28,31 +53,7 @@ class StructuredFormatter(logging.Formatter):
         extra_fields = {
             k: v
             for k, v in record.__dict__.items()
-            if k
-            not in {
-                "name",
-                "msg",
-                "args",
-                "created",
-                "filename",
-                "funcName",
-                "levelname",
-                "levelno",
-                "lineno",
-                "module",
-                "msecs",
-                "pathname",
-                "process",
-                "processName",
-                "relativeCreated",
-                "stack_info",
-                "exc_info",
-                "exc_text",
-                "thread",
-                "threadName",
-                "message",
-                "asctime",
-            }
+            if k not in self._EXCLUDED_KEYS
         }
         if extra_fields:
             log_data["extra"] = extra_fields

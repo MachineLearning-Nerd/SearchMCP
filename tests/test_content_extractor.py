@@ -50,10 +50,11 @@ class TestExtractedContent:
 
 class TestContentExtractor:
     def test_extract_domain(self):
-        extractor = ContentExtractor()
-        assert extractor._extract_domain("https://example.com/page") == "example.com"
-        assert extractor._extract_domain("http://test.org") == "test.org"
-        assert extractor._extract_domain("invalid") == ""
+        from web_mcp.search.relevance import get_domain
+
+        assert get_domain("https://example.com/page") == "example.com"
+        assert get_domain("http://test.org") == "test.org"
+        assert get_domain("invalid") == ""
 
     def test_truncate_no_truncation_needed(self):
         extractor = ContentExtractor()

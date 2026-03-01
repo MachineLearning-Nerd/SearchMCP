@@ -4,8 +4,10 @@ from typing import Any
 from web_mcp.config import settings
 from web_mcp.utils.content_extractor import ContentExtractor, ExtractedContent
 from web_mcp.utils.logger import get_logger
+from web_mcp.utils.validation import normalize_int_param
 
 logger = get_logger("web_mcp")
+_content_extractor: ContentExtractor | None = None
 MIN_CONTENT_LENGTH = 500
 MAX_CONTENT_LENGTH = 20000
 DEFAULT_CONTENT_LENGTH = min(MAX_CONTENT_LENGTH, max(MIN_CONTENT_LENGTH, settings.MAX_CONTENT_LENGTH))
@@ -81,17 +83,22 @@ async def fetch_content(url: str, max_length: int | float | None = None) -> Fetc
     Returns:
         FetchContentResult with extracted content
     """
+    normalized_url = url
     try:
         normalized_url = _normalize_url(url)
-        normalized_max_length = _normalize_max_length(max_length)
+        normalized_max_length = normalize_int_param(
+            max_length, MIN_CONTENT_LENGTH, MAX_CONTENT_LENGTH, DEFAULT_CONTENT_LENGTH, "max_length"
+        )
 
         logger.info(
             f"Fetching content from {normalized_url}",
             extra={"url": normalized_url, "max_length": normalized_max_length},
         )
 
-        extractor = ContentExtractor()
-        extracted: ExtractedContent = await extractor.extract(
+        global _content_extractor
+        if _content_extractor is None:
+            _content_extractor = ContentExtractor()
+        extracted: ExtractedContent = await _content_extractor.extract(
             normalized_url,
             max_length=normalized_max_length,
         )
@@ -132,7 +139,7 @@ async def fetch_content(url: str, max_length: int | float | None = None) -> Fetc
     except Exception as e:
         logger.error(f"Failed to fetch content: {e}", extra={"url": url, "error": str(e)})
         return FetchContentResult(
-            url=normalized_url if "normalized_url" in locals() else url,
+            url=normalized_url,
             title="",
             content="",
             error=str(e),
@@ -146,30 +153,6 @@ def _normalize_url(url: str) -> str:
     if not normalized:
         raise ValueError("url must be a non-empty string")
     return normalized
-
-
-def _normalize_max_length(max_length: int | float | None) -> int:
-    if max_length is None:
-        return DEFAULT_CONTENT_LENGTH
-
-    if isinstance(max_length, bool) or not isinstance(max_length, (int, float)):
-        raise ValueError(
-            f"max_length must be an integer between {MIN_CONTENT_LENGTH} and {MAX_CONTENT_LENGTH}"
-        )
-
-    if isinstance(max_length, float):
-        if not max_length.is_integer():
-            raise ValueError(
-                f"max_length must be an integer between {MIN_CONTENT_LENGTH} and {MAX_CONTENT_LENGTH}"
-            )
-        max_length = int(max_length)
-
-    resolved = int(max_length)
-    if resolved < MIN_CONTENT_LENGTH or resolved > MAX_CONTENT_LENGTH:
-        raise ValueError(
-            f"max_length must be between {MIN_CONTENT_LENGTH} and {MAX_CONTENT_LENGTH}"
-        )
-    return resolved
 
 
 TOOL_SCHEMA = {

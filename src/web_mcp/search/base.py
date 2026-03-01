@@ -40,6 +40,9 @@ class SearchResponse:
         }
 
 
+VALID_CATEGORIES: set[str] = {"general", "images", "videos", "news", "science", "files"}
+
+
 class SearchProvider(ABC):
     @property
     @abstractmethod

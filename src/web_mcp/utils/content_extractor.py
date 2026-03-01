@@ -9,6 +9,7 @@ import httpx
 import trafilatura
 
 from web_mcp.config import settings
+from web_mcp.search.relevance import get_domain
 from web_mcp.utils.logger import get_logger
 
 logger = get_logger("web_mcp")
@@ -66,7 +67,7 @@ class ContentExtractor:
 
     async def extract(self, url: str, max_length: int | None = None) -> ExtractedContent:
         max_len = max_length if max_length is not None else self.max_length
-        domain = self._extract_domain(url)
+        domain = get_domain(url)
 
         try:
             await self._validate_target(url)
@@ -171,7 +172,7 @@ class ContentExtractor:
                 include_links=True,
                 output_format="markdown",
                 url=url,
-                with_metadata=True,
+                with_metadata=False,
             )
 
             metadata = trafilatura.extract_metadata(html, default_url=url)
@@ -202,13 +203,6 @@ class ContentExtractor:
             truncated = truncated[:cut_point]
 
         return truncated.rstrip() + "\n\n[Content truncated...]", True
-
-    def _extract_domain(self, url: str) -> str:
-        try:
-            parsed = urlparse(url)
-            return parsed.netloc or ""
-        except Exception:
-            return ""
 
     async def _validate_target(self, url: str) -> None:
         parsed = urlparse(url)

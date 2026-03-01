@@ -87,6 +87,15 @@ _LANGUAGE_TOKENS = {
     "hindi",
 }
 
+_SEGMENT_SPLIT_RE = re.compile(r"\s*[•|·]\s*")
+_BULLET_NORMALIZE_RE = re.compile(r"\s+[•|·]\s+")
+_MULTI_SPACE_RE = re.compile(r"\s{2,}")
+_WORD_RE = re.compile(r"[^\W\d_]+", flags=re.UNICODE)
+_NAVIGATION_PHRASES_RE = re.compile(
+    "|".join(re.escape(phrase) for phrase in _NAVIGATION_PHRASES),
+    flags=re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True)
 class ScoredSearchResult:
@@ -206,7 +215,7 @@ def clean_search_snippet(snippet: str) -> str:
 
     lowered = cleaned.lower()
     if any(phrase in lowered for phrase in _NAVIGATION_PHRASES):
-        segments = re.split(r"\s*[•|·]\s*", cleaned)
+        segments = _SEGMENT_SPLIT_RE.split(cleaned)
         filtered_segments = [
             segment for segment in segments if not _is_low_information_segment(segment)
         ]
@@ -218,11 +227,9 @@ def clean_search_snippet(snippet: str) -> str:
     if not cleaned:
         return ""
 
-    for phrase in _NAVIGATION_PHRASES:
-        cleaned = re.sub(re.escape(phrase), "", cleaned, flags=re.IGNORECASE)
-
-    cleaned = re.sub(r"\s+[•|·]\s+", " • ", cleaned)
-    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    cleaned = _NAVIGATION_PHRASES_RE.sub("", cleaned)
+    cleaned = _BULLET_NORMALIZE_RE.sub(" • ", cleaned)
+    cleaned = _MULTI_SPACE_RE.sub(" ", cleaned)
     cleaned = cleaned.strip(" •|-")
 
     if _is_low_information_segment(cleaned):
@@ -240,7 +247,7 @@ def _score_result(
     title = result.title.lower()
     description = result.description.lower()
     url = result.url.lower()
-    domain = _get_domain(result.url)
+    domain = get_domain(result.url)
 
     score = 0.0
     for token in query_tokens:
@@ -320,7 +327,7 @@ def _is_low_signal_result(result: SearchResult) -> bool:
     return any(token in lowered_title for token in _LOW_SIGNAL_TOKENS)
 
 
-def _get_domain(url: str) -> str:
+def get_domain(url: str) -> str:
     parsed = urlparse(url)
     return parsed.netloc.lower()
 
@@ -333,7 +340,7 @@ def _is_low_information_segment(segment: str) -> bool:
     if any(phrase in lowered for phrase in _NAVIGATION_PHRASES):
         return True
 
-    words = [_normalize_token(word) for word in re.findall(r"[^\W\d_]+", lowered, flags=re.UNICODE)]
+    words = [_normalize_token(word) for word in _WORD_RE.findall(lowered)]
     words = [word for word in words if word]
     if not words:
         return True
